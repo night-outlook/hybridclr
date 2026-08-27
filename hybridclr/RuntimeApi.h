@@ -12,6 +12,14 @@ namespace hybridclr
 
 		static int32_t LoadMetadataForAOTAssembly(Il2CppArray* dllData, int32_t mode);
 
+        // Experimental M01 API, explicit disabled stubs when native Shadow is OFF.
+        static Il2CppReflectionAssembly* LoadAssemblyShadowPrototype(Il2CppArray* dllData, Il2CppArray* pdbData);
+        static bool ActivateAssemblyShadowPrototype(Il2CppString* name);
+        static Il2CppString* GetAssemblyShadowPrototypeDiagnostics();
+        static Il2CppString* InspectAssemblyShadowPrototypeObject(Il2CppObject* object);
+        static Il2CppString* InspectAssemblyShadowPrototypeAssembly(Il2CppReflectionAssembly* assembly);
+        static void SetAssemblyShadowPrototypePhase(Il2CppString* phase);
+
 		static int32_t GetRuntimeOption(int32_t optionId);
 		static void SetRuntimeOption(int32_t optionId, int32_t value);
 
