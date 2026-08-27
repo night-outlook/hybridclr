@@ -626,6 +626,14 @@ namespace metadata
 		}
 
 		Il2CppClass* GetTypeInfoFromTypeDefinitionRawIndex(uint32_t index);
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+		// Caller holds g_MetadataLock. Never creates metadata or consults the
+		// staging resolver; an absent slot is intentionally returned as null.
+		Il2CppClass* GetCachedTypeInfoFromTypeDefinitionRawIndex(uint32_t index) const
+		{
+			return index < _classList.size() ? _classList[index] : nullptr;
+		}
+#endif
 
 		const Il2CppType* GetInterfaceFromGlobalOffset(TypeInterfaceIndex offset);
 		const Il2CppType* GetInterfaceFromIndex(const Il2CppClass* klass, TypeInterfaceIndex index);
@@ -642,7 +650,7 @@ namespace metadata
 		void ReadFieldRefInfoFromFieldDefToken(uint32_t rowIndex, FieldRefInfo& ret) override;
 		void ReadMethodDefSig(BlobReader& reader, const Il2CppGenericContainer* klassGenericContainer, const Il2CppGenericContainer* methodGenericContainer, Il2CppMethodDefinition& methodDef, std::vector<ParamDetail>& paramArr);
 
-		void InitBasic(Il2CppImage* image);
+		void InitBasic(Il2CppImage* image, bool publish = true);
 		void BuildIl2CppImage(Il2CppImage* image);
 		void BuildIl2CppAssembly(Il2CppAssembly* assembly);
 

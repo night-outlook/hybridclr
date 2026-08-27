@@ -12,7 +12,8 @@ namespace hybridclr
 
 		static int32_t LoadMetadataForAOTAssembly(Il2CppArray* dllData, int32_t mode);
 
-        // Experimental M01 API, explicit disabled stubs when native Shadow is OFF.
+        // M01 source-compatibility symbols. Loading/activation are retired;
+        // diagnostics/inspection forward to the generalized Assembly Shadow API.
         static Il2CppReflectionAssembly* LoadAssemblyShadowPrototype(Il2CppArray* dllData, Il2CppArray* pdbData);
         static bool ActivateAssemblyShadowPrototype(Il2CppString* name);
         static Il2CppString* GetAssemblyShadowPrototypeDiagnostics();

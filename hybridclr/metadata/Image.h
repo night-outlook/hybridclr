@@ -15,6 +15,7 @@
 #include "VTableSetup.h"
 #include "MetadataUtil.h"
 #include "PDBImage.h"
+#include "AssemblyShadowBridge.h"
 
 
 namespace hybridclr
@@ -156,6 +157,16 @@ namespace metadata
 
 		const Il2CppAssembly* GetLoadedAssembly(const char* assemblyName)
 		{
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+			const Il2CppAssembly* stagedAssembly = nullptr;
+			if (AssemblyShadowBridge::TryResolveForCurrentThread(assemblyName, stagedAssembly))
+			{
+				if (!stagedAssembly)
+					il2cpp::vm::Exception::Raise(il2cpp::vm::Exception::GetDllNotFoundException(assemblyName));
+				_nameToAssemblies[stagedAssembly->image->nameNoExt] = stagedAssembly;
+				return stagedAssembly;
+			}
+#endif
 			auto it = _nameToAssemblies.find(assemblyName);
 			if (it != _nameToAssemblies.end())
 			{

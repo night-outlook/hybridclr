@@ -89,10 +89,13 @@ namespace metadata
 		s_images[image->GetIndex()] = image;
 	}
 
-	void InterpreterImage::InitBasic(Il2CppImage* image)
+	void InterpreterImage::InitBasic(Il2CppImage* image, bool publish)
 	{
 		SetIl2CppImage(image);
-		RegisterImage(this);
+		if (publish)
+			RegisterImage(this);
+		else
+			_nameToAssemblies.clear();
 	}
 
 	void InterpreterImage::BuildIl2CppAssembly(Il2CppAssembly* ass)
@@ -2016,6 +2019,10 @@ namespace metadata
 
 		TbAssemblyRef assRef = _rawImage->ReadAssemblyRef(referencedAssemblyTableIndex + 1);
 		const char* refAssName = _rawImage->GetStringFromRawIndex(assRef.name);
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+		if (AssemblyShadowBridge::IsStaging())
+			return GetLoadedAssembly(refAssName);
+#endif
 		const Il2CppAssembly* il2cppAssRef = il2cpp::vm::Assembly::GetLoadedAssembly(refAssName);
 		if (!il2cppAssRef)
 		{

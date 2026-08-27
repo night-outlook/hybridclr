@@ -13,9 +13,6 @@
 #include "vm/String.h"
 #include "vm/MetadataLock.h"
 #include "vm/MetadataCache.h"
-#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
-#include "vm/AssemblyShadowPrototype.h"
-#endif
 
 #include "Image.h"
 #include "MetadataModule.h"
@@ -107,29 +104,7 @@ namespace metadata
         return ass;
     }
 
-#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
-    Il2CppAssembly* Assembly::CreateShadowPrototype(const byte* assemblyData, uint64_t length, const byte* pdbData, uint64_t pdbLength)
-    {
-        il2cpp::os::FastAutoLock lock(&il2cpp::vm::g_MetadataLock);
-        if (il2cpp::vm::AssemblyShadowPrototype::HasStagedAssembly())
-            RaiseNotSupportedException("M01 permits only one staged shadow per process; restart after failure");
-        const Il2CppAssembly* baseline = il2cpp::vm::Assembly::GetLoadedAssembly("AssemblyA.Implementation.Internal");
-        if (!baseline || IsInterpreterImage(baseline->image))
-            RaiseNotSupportedException("M01 requires the Internal assembly in the AOT baseline");
-        Il2CppAssembly* shadow = Create(assemblyData, length, pdbData, pdbLength, true);
-        if (!il2cpp::vm::AssemblyShadowPrototype::Stage(baseline, shadow))
-            RaiseExecutionEngineException("M01 shadow stage failed; process restart required");
-        // Deliberately do not call RunModuleInitializer. Registration is visible in M01;
-        // transaction/private staging and rollback belong to M03.
-        return shadow;
-    }
-#endif
-
-    Il2CppAssembly* Assembly::Create(const byte* assemblyData, uint64_t length, const byte* rawSymbolStoreBytes, uint64_t rawSymbolStoreLength
-#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
-        , bool shadowPrototype
-#endif
-    )
+    Il2CppAssembly* Assembly::Create(const byte* assemblyData, uint64_t length, const byte* rawSymbolStoreBytes, uint64_t rawSymbolStoreLength)
     {
         il2cpp::os::FastAutoLock lock(&il2cpp::vm::g_MetadataLock);
 
@@ -168,10 +143,6 @@ namespace metadata
 
         TbAssembly data = image->GetRawImage().ReadAssembly(1);
         const char* nameNoExt = image->GetStringFromRawIndex(data.name);
-#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
-        if (shadowPrototype && !il2cpp::vm::AssemblyShadowPrototype::IsCandidateName(nameNoExt))
-            RaiseNotSupportedException("M01 only accepts AssemblyA.Implementation.Internal; restart after failure");
-#endif
 
         Il2CppAssembly* ass;
         Il2CppImage* image2;

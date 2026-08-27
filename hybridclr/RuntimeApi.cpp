@@ -1,4 +1,5 @@
 #include "RuntimeApi.h"
+#include "AssemblyShadowRuntimeApi.h"
 
 #include "codegen/il2cpp-codegen.h"
 #include "vm/InternalCalls.h"
@@ -9,9 +10,7 @@
 #include "vm/String.h"
 #include "utils/StringUtils.h"
 #include "metadata/Assembly.h"
-#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
-#include "vm/AssemblyShadowPrototype.h"
-#endif
+#include "vm/AssemblyShadow.h"
 
 #include "metadata/MetadataModule.h"
 #include "metadata/MetadataUtil.h"
@@ -27,6 +26,7 @@ namespace hybridclr
 		il2cpp::vm::InternalCalls::Add("HybridCLR.RuntimeApi::SetRuntimeOption(HybridCLR.RuntimeOptionId,System.Int32)", (Il2CppMethodPointer)SetRuntimeOption);
 		il2cpp::vm::InternalCalls::Add("HybridCLR.RuntimeApi::PreJitClass(System.Type)", (Il2CppMethodPointer)PreJitClass);
 		il2cpp::vm::InternalCalls::Add("HybridCLR.RuntimeApi::PreJitMethod(System.Reflection.MethodInfo)", (Il2CppMethodPointer)PreJitMethod);
+        AssemblyShadowRuntimeApi::RegisterInternalCalls();
         il2cpp::vm::InternalCalls::Add("HybridCLR.RuntimeApi::LoadAssemblyShadowPrototype(System.Byte[],System.Byte[])", (Il2CppMethodPointer)LoadAssemblyShadowPrototype);
         il2cpp::vm::InternalCalls::Add("HybridCLR.RuntimeApi::ActivateAssemblyShadowPrototype(System.String)", (Il2CppMethodPointer)ActivateAssemblyShadowPrototype);
         il2cpp::vm::InternalCalls::Add("HybridCLR.RuntimeApi::GetAssemblyShadowPrototypeDiagnostics()", (Il2CppMethodPointer)GetAssemblyShadowPrototypeDiagnostics);
@@ -37,46 +37,34 @@ namespace hybridclr
 
     Il2CppReflectionAssembly* RuntimeApi::LoadAssemblyShadowPrototype(Il2CppArray* dllData, Il2CppArray* pdbData)
     {
-#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
-        if (!dllData || il2cpp::vm::Array::GetByteLength(dllData) == 0)
-            il2cpp::vm::Exception::Raise(il2cpp::vm::Exception::GetArgumentNullException("dllData"));
-        auto* assembly = metadata::Assembly::CreateShadowPrototype(
-            reinterpret_cast<const byte*>(il2cpp::vm::Array::GetFirstElementAddress(dllData)),
-            il2cpp::vm::Array::GetByteLength(dllData),
-            pdbData && il2cpp::vm::Array::GetByteLength(pdbData) ? reinterpret_cast<const byte*>(il2cpp::vm::Array::GetFirstElementAddress(pdbData)) : nullptr,
-            pdbData ? il2cpp::vm::Array::GetByteLength(pdbData) : 0);
-        return il2cpp::vm::Reflection::GetAssemblyObject(assembly);
-#else
-        RaiseNotSupportedException("native Assembly Shadow is disabled");
+        (void)dllData;
+        (void)pdbData;
+        RaiseNotSupportedException("Assembly Shadow Prototype was retired; use the M03 transaction API");
         return nullptr;
-#endif
     }
 
     bool RuntimeApi::ActivateAssemblyShadowPrototype(Il2CppString* name)
     {
-#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
-        return name && il2cpp::vm::AssemblyShadowPrototype::Activate(il2cpp::utils::StringUtils::Utf16ToUtf8(name->chars, name->length).c_str());
-#else
-        RaiseNotSupportedException("native Assembly Shadow is disabled");
+        (void)name;
+        RaiseNotSupportedException("Assembly Shadow Prototype was retired; use the M03 transaction API");
         return false;
-#endif
     }
 
     Il2CppString* RuntimeApi::GetAssemblyShadowPrototypeDiagnostics()
     {
-#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
-        return il2cpp::vm::String::New(il2cpp::vm::AssemblyShadowPrototype::Diagnostics().c_str());
-#else
-        return il2cpp::vm::String::New("{\"enabled\":false,\"active\":false}");
-#endif
+        std::string json;
+        il2cpp::vm::AssemblyShadowError result = il2cpp::vm::AssemblyShadow::GetDiagnosticsJson(json);
+        if (result == il2cpp::vm::AssemblyShadowError::FeatureDisabled || json.empty())
+            return il2cpp::vm::String::New("{\"enabled\":false}");
+        return il2cpp::vm::String::New(json.c_str());
     }
 
     Il2CppString* RuntimeApi::InspectAssemblyShadowPrototypeObject(Il2CppObject* object)
     {
 #if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
-        return il2cpp::vm::String::New(il2cpp::vm::AssemblyShadowPrototype::InspectObject(object).c_str());
+        return il2cpp::vm::String::New(il2cpp::vm::AssemblyShadow::InspectObject(object).c_str());
 #else
-        RaiseNotSupportedException("native Assembly Shadow is disabled");
+        RaiseNotSupportedException("Assembly Shadow physical inspection requires native IL2CPP");
         return nullptr;
 #endif
     }
@@ -84,9 +72,9 @@ namespace hybridclr
     Il2CppString* RuntimeApi::InspectAssemblyShadowPrototypeAssembly(Il2CppReflectionAssembly* assembly)
     {
 #if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
-        return il2cpp::vm::String::New(il2cpp::vm::AssemblyShadowPrototype::InspectAssembly(assembly ? assembly->assembly : nullptr).c_str());
+        return il2cpp::vm::String::New(il2cpp::vm::AssemblyShadow::InspectAssembly(assembly ? assembly->assembly : nullptr).c_str());
 #else
-        RaiseNotSupportedException("native Assembly Shadow is disabled");
+        RaiseNotSupportedException("Assembly Shadow physical inspection requires native IL2CPP");
         return nullptr;
 #endif
     }
@@ -94,7 +82,9 @@ namespace hybridclr
     void RuntimeApi::SetAssemblyShadowPrototypePhase(Il2CppString* phase)
     {
 #if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
-        il2cpp::vm::AssemblyShadowPrototype::SetPhase(phase ? il2cpp::utils::StringUtils::Utf16ToUtf8(phase->chars, phase->length).c_str() : "unspecified");
+        il2cpp::vm::AssemblyShadow::SetPhase(phase ? il2cpp::utils::StringUtils::Utf16ToUtf8(phase->chars, phase->length).c_str() : "unspecified");
+#else
+        (void)phase;
 #endif
     }
 

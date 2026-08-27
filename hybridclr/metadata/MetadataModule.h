@@ -3,6 +3,7 @@
 #include "InterpreterImage.h"
 #include "AOTHomologousImage.h"
 #include "Assembly.h"
+#include "AssemblyShadowBridge.h"
 
 namespace hybridclr
 {
@@ -17,6 +18,10 @@ namespace metadata
 
 		static InterpreterImage* GetImage(uint32_t imageIndex)
 		{
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+			if (InterpreterImage* staged = AssemblyShadowBridge::GetPrivateImage(imageIndex))
+				return staged;
+#endif
 			return InterpreterImage::GetImage(imageIndex);
 		}
 

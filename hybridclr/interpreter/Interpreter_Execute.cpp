@@ -12,6 +12,7 @@
 #include "vm/Exception.h"
 #include "vm/Thread.h"
 #include "vm/Runtime.h"
+#include "vm/AssemblyShadow.h"
 #include "vm/Reflection.h"
 #include "metadata/GenericMetadata.h"
 #if HYBRIDCLR_UNITY_2020_OR_NEW
@@ -1668,6 +1669,9 @@ const int32_t kMaxRetValueTypeStackObjectSize = 1024;
 
 	void Interpreter::Execute(const MethodInfo* methodInfo, StackObject* args, void* ret)
 	{
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+        il2cpp::vm::AssemblyShadow::RequireUserCodeAllowed();
+#endif
 		MachineState& machine = InterpreterModule::GetCurrentThreadMachineState();
 		InterpFrameGroup interpFrameGroup(machine);
 
@@ -12307,4 +12311,3 @@ const int32_t kMaxRetValueTypeStackObjectSize = 1024;
 
 }
 }
-
