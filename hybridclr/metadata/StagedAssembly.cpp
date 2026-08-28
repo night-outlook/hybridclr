@@ -438,8 +438,7 @@ AssemblyShadowError Assembly::InitializeStagedRuntimeMetadata(StagedAssembly* st
         il2cpp::os::FastAutoLock lock(&il2cpp::vm::g_MetadataLock);
         // Bind even references not eagerly touched by layout/vtable setup. Lazy
         // metadata after commit must not consult a constructor-cached baseline.
-        for (size_t i = 0; i < staged->references.size(); ++i)
-            staged->interpreterImage->GetReferencedAssembly(static_cast<int32_t>(i), nullptr, 0);
+        staged->interpreterImage->BindStagedAssemblyReferences();
         staged->interpreterImage->InitRuntimeMetadatas();
         staged->runtimeMetadataInitialized = true;
         return AssemblyShadowError::Success;

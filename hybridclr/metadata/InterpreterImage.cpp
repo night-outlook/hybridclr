@@ -2012,6 +2012,27 @@ namespace metadata
 		return NULL;
 	}
 
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+	void InterpreterImage::BindStagedAssemblyReferences()
+	{
+		IL2CPP_ASSERT(AssemblyShadowBridge::IsStaging());
+		for (uint32_t row = 1, count = _rawImage->GetTableRowNum(TableType::ASSEMBLYREF); row <= count; ++row)
+		{
+			TbAssemblyRef reference = _rawImage->ReadAssemblyRef(row);
+			const char* name = _rawImage->GetStringFromRawIndex(reference.name);
+			std::vector<const Il2CppAssembly*> providers;
+			if (AssemblyShadowBridge::TryResolveFacadeForCurrentThread(name, providers))
+			{
+				if (!IsNetStandardFacadeName(name) || providers.empty())
+					RaiseExecutionEngineException("Invalid private logical facade binding");
+				_stagedNetstandardProviders.swap(providers);
+			}
+			else
+				GetLoadedAssembly(name); // Strict TLS lookup, including missing closure members.
+		}
+	}
+#endif
+
 	const Il2CppAssembly* InterpreterImage::GetReferencedAssembly(int32_t referencedAssemblyTableIndex, const Il2CppAssembly assembliesTable[], int assembliesCount)
 	{
 		auto& table = _rawImage->GetTable(TableType::ASSEMBLYREF);

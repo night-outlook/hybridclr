@@ -20,6 +20,9 @@
 #endif
 #include "icalls/mscorlib/System/Type.h"
 #include "utils/StringUtils.h"
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+#include "vm-utils/VmStringUtils.h"
+#endif
 
 #include "MetadataUtil.h"
 #include "BlobReader.h"
@@ -43,7 +46,7 @@ namespace metadata
         //!!!}}INIT_RAW_IMAGE
     }
 
-    static const char* s_netstandardRefs[]
+    static const char* const s_netstandardRefs[]
     {
         "mscorlib",
         "System",
@@ -66,6 +69,45 @@ namespace metadata
         "System.Net.Http",
         nullptr,
     };
+
+    const char* const* Image::GetNetStandardProviderNames()
+    {
+        return s_netstandardRefs;
+    }
+
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+    bool Image::IsNetStandardFacadeName(const char* name)
+    {
+        return name && il2cpp::utils::VmStringUtils::CaseInsensitiveComparer()(name, "netstandard");
+    }
+
+    bool Image::CanUseLogicalNetStandardFacade(const char* name, bool isCandidate, bool hasPhysicalAssembly, size_t stableProviderCount)
+    {
+        // Candidate/physical names always retain normal closure/allowlist
+        // semantics. Only the absent logical facade can use approved providers.
+        return !isCandidate && !hasPhysicalAssembly && stableProviderCount != 0 && IsNetStandardFacadeName(name);
+    }
+
+    bool Image::IsApprovedFacadeType(const Il2CppClass* klass, const std::vector<const Il2CppAssembly*>& providers)
+    {
+        if (!klass || !klass->image || !klass->image->assembly) return false;
+        for (const Il2CppAssembly* provider : providers)
+            if (klass->image->assembly == provider) return true;
+        return false;
+    }
+
+    Il2CppClass* Image::FindApprovedFacadeType(const std::vector<const Il2CppAssembly*>& providers, const char* namespaze, const char* name)
+    {
+        for (const Il2CppAssembly* provider : providers)
+        {
+            // Reject a forwarded handle before GetTypeInfoFromHandle or any
+            // usage trace can touch an unapproved/candidate declaring image.
+            Il2CppClass* klass = il2cpp::vm::Image::ClassFromNameDefinedInImage(provider->image, namespaze, name);
+            if (IsApprovedFacadeType(klass, providers)) return klass;
+        }
+        return nullptr;
+    }
+#endif
 
     bool Image::IsValueTypeFromToken(TableType tableType, uint32_t rowIndex)
     {
@@ -711,7 +753,13 @@ namespace metadata
 
     Il2CppClass* Image::FindNetStandardExportedType(const char* namespaceStr, const char* nameStr)
     {
-        for (const char** ptrAssName = s_netstandardRefs; *ptrAssName; ptrAssName++)
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+        if (!_stagedNetstandardProviders.empty())
+        {
+            return FindApprovedFacadeType(_stagedNetstandardProviders, namespaceStr, nameStr);
+        }
+#endif
+        for (const char* const* ptrAssName = s_netstandardRefs; *ptrAssName; ptrAssName++)
         {
             const Il2CppAssembly* refAss = GetLoadedAssembly(*ptrAssName);
             if (refAss)
@@ -733,16 +781,25 @@ namespace metadata
         const char* assName = _rawImage->GetStringFromRawIndex(data.name);
         const char* typeNameStr = _rawImage->GetStringFromRawIndex(typeName);
         const char* typeNamespaceStr = _rawImage->GetStringFromRawIndex(typeNamespace);
-        const Il2CppAssembly* refAss = GetLoadedAssembly(assName);
         Il2CppClass* klass = nullptr;
-        if (refAss)
-        {
-            const Il2CppImage* image2 = il2cpp::vm::Assembly::GetImage(refAss);
-            klass = il2cpp::vm::Class::FromName(image2, typeNamespaceStr, typeNameStr);
-        }
-        else if (!refAss && std::strcmp(assName, "netstandard") == 0)
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+        if (!_stagedNetstandardProviders.empty() && IsNetStandardFacadeName(assName))
         {
             klass = FindNetStandardExportedType(typeNamespaceStr, typeNameStr);
+        }
+        else
+#endif
+        {
+            const Il2CppAssembly* refAss = GetLoadedAssembly(assName);
+            if (refAss)
+            {
+                const Il2CppImage* image2 = il2cpp::vm::Assembly::GetImage(refAss);
+                klass = il2cpp::vm::Class::FromName(image2, typeNamespaceStr, typeNameStr);
+            }
+            else if (std::strcmp(assName, "netstandard") == 0)
+            {
+                klass = FindNetStandardExportedType(typeNamespaceStr, typeNameStr);
+            }
         }
         if (!klass)
         {

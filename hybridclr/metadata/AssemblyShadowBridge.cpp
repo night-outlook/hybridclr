@@ -8,8 +8,9 @@ namespace hybridclr { namespace metadata {
 
 static thread_local ScopedStagingResolver* s_stagingResolver = nullptr;
 
-ScopedStagingResolver::ScopedStagingResolver(const std::vector<StagedAssembly*>& images, StagingResolver resolver, void* context)
-    : _images(images), _resolver(resolver), _context(context), _previous(s_stagingResolver)
+ScopedStagingResolver::ScopedStagingResolver(const std::vector<StagedAssembly*>& images, StagingResolver resolver, void* context,
+    StagingFacadeResolver facadeResolver)
+    : _images(images), _resolver(resolver), _facadeResolver(facadeResolver), _context(context), _previous(s_stagingResolver)
 {
     s_stagingResolver = this;
 }
@@ -40,6 +41,13 @@ bool AssemblyShadowBridge::TryResolveForCurrentThread(const char* name, const Il
         return false;
     result = s_stagingResolver->_resolver ? s_stagingResolver->_resolver(name, s_stagingResolver->_context) : nullptr;
     return true;
+}
+
+bool AssemblyShadowBridge::TryResolveFacadeForCurrentThread(const char* name, std::vector<const Il2CppAssembly*>& providers)
+{
+    providers.clear();
+    return s_stagingResolver && s_stagingResolver->_facadeResolver &&
+        s_stagingResolver->_facadeResolver(name, providers, s_stagingResolver->_context);
 }
 
 }}

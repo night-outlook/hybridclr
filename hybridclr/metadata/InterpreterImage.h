@@ -653,6 +653,9 @@ namespace metadata
 		void InitBasic(Il2CppImage* image, bool publish = true);
 		void BuildIl2CppImage(Il2CppImage* image);
 		void BuildIl2CppAssembly(Il2CppAssembly* assembly);
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+		void BindStagedAssemblyReferences();
+#endif
 
 		void InitRuntimeMetadatas() override;
 	protected:

@@ -44,6 +44,14 @@ namespace metadata
 	{
 	public:
 
+		static const char* const* GetNetStandardProviderNames();
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+		static bool IsNetStandardFacadeName(const char* name);
+		static bool CanUseLogicalNetStandardFacade(const char* name, bool isCandidate, bool hasPhysicalAssembly, size_t stableProviderCount);
+		static bool IsApprovedFacadeType(const Il2CppClass* klass, const std::vector<const Il2CppAssembly*>& providers);
+		static Il2CppClass* FindApprovedFacadeType(const std::vector<const Il2CppAssembly*>& providers, const char* namespaze, const char* name);
+#endif
+
 		RawImageBase& GetRawImage() const
 		{
 			return *_rawImage;
@@ -189,6 +197,11 @@ namespace metadata
 		RawImageBase* _rawImage;
 		PDBImage* _pdbImage;
 		Il2CppHashMap<const char*, const Il2CppAssembly*, CStringHash, CStringEqualTo> _nameToAssemblies;
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+		// Immutable after private reference binding; retained with the image even
+		// after abort/commit, so lazy facade lookup never widens to global state.
+		std::vector<const Il2CppAssembly*> _stagedNetstandardProviders;
+#endif
 		il2cpp::gc::AppendOnlyGCHashMap<uint32_t, Il2CppString*, il2cpp::utils::PassThroughHash<uint32_t>> _il2cppStringCache;
 	};
 }
