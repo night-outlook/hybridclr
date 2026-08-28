@@ -92,6 +92,7 @@ namespace hybridclr
         il2cpp::vm::InternalCalls::Add("HybridCLR.AssemblyShadowRuntime::GetState(HybridCLR.AssemblyShadowState&)", (Il2CppMethodPointer)GetState);
         il2cpp::vm::InternalCalls::Add("HybridCLR.AssemblyShadowRuntime::GetAssemblyExecutionMode(System.String,HybridCLR.AssemblyExecutionMode&)", (Il2CppMethodPointer)GetAssemblyExecutionMode);
         il2cpp::vm::InternalCalls::Add("HybridCLR.AssemblyShadowRuntime::GetDiagnosticsJson(System.String&)", (Il2CppMethodPointer)GetDiagnosticsJson);
+        il2cpp::vm::InternalCalls::Add("HybridCLR.AssemblyShadowRuntime::GetTypeResolutionInfo(System.Type,System.String&)", (Il2CppMethodPointer)GetTypeResolutionInfo);
     }
 
     int32_t AssemblyShadowRuntimeApi::ConfigureCandidates(Il2CppString* baselineBuildId,
@@ -255,6 +256,34 @@ namespace hybridclr
             il2cpp::vm::AssemblyExecutionMode value = il2cpp::vm::AssemblyExecutionMode::AotBaseline;
             AssemblyShadowError result = il2cpp::vm::AssemblyShadow::GetAssemblyExecutionMode(name.c_str(), value);
             *mode = static_cast<int32_t>(value);
+            return ErrorCode(result);
+        }
+        catch (const std::exception&)
+        {
+            return ErrorCode(AssemblyShadowError::InternalError);
+        }
+        catch (...)
+        {
+            return ErrorCode(AssemblyShadowError::InternalError);
+        }
+#endif
+    }
+
+    int32_t AssemblyShadowRuntimeApi::GetTypeResolutionInfo(Il2CppReflectionType* type, Il2CppString** json)
+    {
+        if (json)
+            *json = nullptr;
+#if !HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+        return Disabled();
+#else
+        if (!json || !type || !type->type)
+            return ErrorCode(AssemblyShadowError::InvalidArgument);
+        try
+        {
+            std::string value;
+            AssemblyShadowError result = il2cpp::vm::AssemblyShadow::GetTypeResolutionInfo(type->type, value);
+            if (!value.empty())
+                *json = il2cpp::vm::String::New(value.c_str());
             return ErrorCode(result);
         }
         catch (const std::exception&)
