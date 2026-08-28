@@ -273,19 +273,19 @@ namespace hybridclr
         if (json)
             *json = nullptr;
 #if !HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
-        if (json)
-            *json = il2cpp::vm::String::New("{\"enabled\":false}");
-        return Disabled();
+        if (!json)
+            return Disabled();
 #else
         if (!json)
             return ErrorCode(AssemblyShadowError::InvalidArgument);
+#endif
         try
         {
             std::string value;
             AssemblyShadowError result = il2cpp::vm::AssemblyShadow::GetDiagnosticsJson(value);
-            if (result == AssemblyShadowError::FeatureDisabled)
-                *json = il2cpp::vm::String::New("{\"enabled\":false}");
-            else if (!value.empty())
+            // The native serializer owns the schema in both feature modes.
+            // FeatureDisabled still carries a complete diagnostic snapshot.
+            if (!value.empty())
                 *json = il2cpp::vm::String::New(value.c_str());
             return ErrorCode(result);
         }
@@ -297,6 +297,5 @@ namespace hybridclr
         {
             return ErrorCode(AssemblyShadowError::InternalError);
         }
-#endif
     }
 }
