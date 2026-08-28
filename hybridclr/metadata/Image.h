@@ -16,6 +16,9 @@
 #include "MetadataUtil.h"
 #include "PDBImage.h"
 #include "AssemblyShadowBridge.h"
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+#include "vm/AssemblyShadow.h"
+#endif
 
 
 namespace hybridclr
@@ -46,6 +49,8 @@ namespace metadata
 
 		static const char* const* GetNetStandardProviderNames();
 #if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+        const Il2CppAssembly* GetReferenceRequester() const;
+
 		static bool IsNetStandardFacadeName(const char* name);
 		static bool CanUseLogicalNetStandardFacade(const char* name, bool isCandidate, bool hasPhysicalAssembly, size_t stableProviderCount);
 		static bool IsApprovedFacadeType(const Il2CppClass* klass, const std::vector<const Il2CppAssembly*>& providers);
@@ -174,6 +179,10 @@ namespace metadata
 				_nameToAssemblies[stagedAssembly->image->nameNoExt] = stagedAssembly;
 				return stagedAssembly;
 			}
+			// An image's upstream local cache can predate Commit. Resolve the
+			// committed identity before consulting those physical cache entries.
+			if (const Il2CppAssembly* active = il2cpp::vm::AssemblyShadow::ResolveByName(assemblyName,
+				il2cpp::vm::AssemblyResolveContext::Normal)) return active;
 #endif
 			auto it = _nameToAssemblies.find(assemblyName);
 			if (it != _nameToAssemblies.end())
@@ -201,6 +210,7 @@ namespace metadata
 		// Immutable after private reference binding; retained with the image even
 		// after abort/commit, so lazy facade lookup never widens to global state.
 		std::vector<const Il2CppAssembly*> _stagedNetstandardProviders;
+        const Il2CppAssembly* _referenceRequester = nullptr;
 #endif
 		il2cpp::gc::AppendOnlyGCHashMap<uint32_t, Il2CppString*, il2cpp::utils::PassThroughHash<uint32_t>> _il2cppStringCache;
 	};

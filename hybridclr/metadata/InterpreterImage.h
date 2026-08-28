@@ -8,6 +8,7 @@
 #endif
 
 #include "Image.h"
+#include "AssemblyShadowAssemblyReference.h"
 #include "CustomAttributeDataWriter.h"
 
 namespace hybridclr
@@ -493,6 +494,10 @@ namespace metadata
 		}
 
 		const Il2CppAssembly* GetReferencedAssembly(int32_t referencedAssemblyTableIndex, const Il2CppAssembly assembliesTable[], int assembliesCount);
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+        void GetDeclaredReferencedAssemblyNames(il2cpp::vm::AssemblyNameVector& target);
+        bool DeclaredReferenceHasPublicKeyToken(int32_t index) const;
+#endif
 
 		Il2CppMetadataCustomAttributeHandle GetCustomAttributeTypeToken(uint32_t token)
 		{
@@ -715,6 +720,9 @@ namespace metadata
 
 		bool _inited;
 		Il2CppImage* _il2cppImage;
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+        std::vector<AssemblyReferenceIdentity> _declaredAssemblyReferences;
+#endif
 		const uint32_t _index;
 
 		std::vector<TypeDefinitionDetail> _typeDetails;

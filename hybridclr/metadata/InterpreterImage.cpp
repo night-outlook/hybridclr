@@ -115,6 +115,17 @@ namespace metadata
 		aname.public_key = _rawImage->GetBlobFromRawIndex(data.publicKey);
 		aname.name = _rawImage->GetStringFromRawIndex(data.name);
 		aname.culture = _rawImage->GetStringFromRawIndex(data.locale);
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+        _referenceRequester = ass;
+        // These identities belong to the declaring image, not to whichever
+        // physical AOT/provider currently satisfies a reference. Retain the
+        // complete rows before publication, including logical facade rows.
+        _declaredAssemblyReferences.resize(ass->referencedAssemblyCount);
+        for (int32_t index = 0; index < ass->referencedAssemblyCount; ++index)
+        {
+            _declaredAssemblyReferences[index] = ReadDeclaredAssemblyReference(*_rawImage, _rawImage->ReadAssemblyRef(index + 1));
+        }
+#endif
 	}
 
 	void InterpreterImage::BuildIl2CppImage(Il2CppImage* image2)
@@ -2013,6 +2024,23 @@ namespace metadata
 	}
 
 #if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+    bool InterpreterImage::DeclaredReferenceHasPublicKeyToken(int32_t index) const
+    {
+        IL2CPP_ASSERT(index >= 0 && static_cast<size_t>(index) < _declaredAssemblyReferences.size());
+        return _declaredAssemblyReferences[index].hasPublicKeyToken;
+    }
+
+    void InterpreterImage::GetDeclaredReferencedAssemblyNames(il2cpp::vm::AssemblyNameVector& target)
+    {
+        for (size_t index = 0; index < _declaredAssemblyReferences.size(); ++index)
+        {
+            const Il2CppAssemblyName& reference = _declaredAssemblyReferences[index].name;
+            if (_stagedNetstandardProviders.empty() || !IsNetStandardFacadeName(reference.name))
+                GetReferencedAssembly(static_cast<int32_t>(index), nullptr, 0);
+            target.push_back(&reference);
+        }
+    }
+
 	void InterpreterImage::BindStagedAssemblyReferences()
 	{
 		IL2CPP_ASSERT(AssemblyShadowBridge::IsStaging());
@@ -2028,7 +2056,8 @@ namespace metadata
 				_stagedNetstandardProviders.swap(providers);
 			}
 			else
-				GetLoadedAssembly(name); // Strict TLS lookup, including missing closure members.
+                il2cpp::vm::AssemblyShadow::ResolveReferencedAssembly(GetReferenceRequester(), nullptr, name,
+                    row - 1, "InterpreterImage::BindStagedAssemblyReferences");
 		}
 	}
 #endif
@@ -2041,10 +2070,14 @@ namespace metadata
 		TbAssemblyRef assRef = _rawImage->ReadAssemblyRef(referencedAssemblyTableIndex + 1);
 		const char* refAssName = _rawImage->GetStringFromRawIndex(assRef.name);
 #if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
-		if (AssemblyShadowBridge::IsStaging())
-			return GetLoadedAssembly(refAssName);
-#endif
+        const Il2CppAssembly* physical = AssemblyShadowBridge::IsStaging() ? nullptr :
+            il2cpp::vm::Assembly::GetLoadedAssemblyPhysical(refAssName);
+        const Il2CppAssembly* il2cppAssRef = il2cpp::vm::AssemblyShadow::ResolveReferencedAssembly(
+            GetReferenceRequester(), physical, refAssName, referencedAssemblyTableIndex,
+            "InterpreterImage::GetReferencedAssembly");
+#else
 		const Il2CppAssembly* il2cppAssRef = il2cpp::vm::Assembly::GetLoadedAssembly(refAssName);
+#endif
 		if (!il2cppAssRef)
 		{
 			il2cpp::vm::Exception::Raise(il2cpp::vm::Exception::GetDllNotFoundException(refAssName));

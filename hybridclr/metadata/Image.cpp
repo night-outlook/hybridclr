@@ -22,6 +22,7 @@
 #include "utils/StringUtils.h"
 #if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
 #include "vm-utils/VmStringUtils.h"
+#include "vm/MetadataCache.h"
 #endif
 
 #include "MetadataUtil.h"
@@ -775,6 +776,17 @@ namespace metadata
         return nullptr;
     }
 
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+    const Il2CppAssembly* Image::GetReferenceRequester() const
+    {
+        if (_referenceRequester) return _referenceRequester;
+        // AOT homologous metadata has no interpreter owner. Resolve only its
+        // physical AOT identity so a real external consumer is not disguised.
+        TbAssembly assembly = _rawImage->ReadAssembly(1);
+        return il2cpp::vm::MetadataCache::GetAotAssemblyByNamePhysical(_rawImage->GetStringFromRawIndex(assembly.name));
+    }
+#endif
+
     const Il2CppType* Image::GetIl2CppType(uint32_t assemblyRefIndex, uint32_t typeNamespace, uint32_t typeName, bool raiseExceptionIfNotFound)
     {
         TbAssemblyRef data = _rawImage->ReadAssemblyRef(assemblyRefIndex);
@@ -790,7 +802,13 @@ namespace metadata
         else
 #endif
         {
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+            const Il2CppAssembly* refAss = il2cpp::vm::AssemblyShadow::ResolveReferencedAssembly(
+                GetReferenceRequester(), AssemblyShadowBridge::IsStaging() ? nullptr : GetLoadedAssembly(assName),
+                assName, assemblyRefIndex - 1, "Image::GetIl2CppType");
+#else
             const Il2CppAssembly* refAss = GetLoadedAssembly(assName);
+#endif
             if (refAss)
             {
                 const Il2CppImage* image2 = il2cpp::vm::Assembly::GetImage(refAss);
