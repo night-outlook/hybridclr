@@ -23,5 +23,6 @@ namespace hybridclr
         static int32_t GetAssemblyExecutionMode(Il2CppString* logicalAssemblyName, int32_t* mode);
         static int32_t GetDiagnosticsJson(Il2CppString** json);
         static int32_t GetTypeResolutionInfo(Il2CppReflectionType* type, Il2CppString** json);
+        static int32_t GetExecutionDiagnosticsJson(Il2CppString** json);
     };
 }

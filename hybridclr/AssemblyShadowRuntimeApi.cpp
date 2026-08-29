@@ -93,6 +93,7 @@ namespace hybridclr
         il2cpp::vm::InternalCalls::Add("HybridCLR.AssemblyShadowRuntime::GetAssemblyExecutionMode(System.String,HybridCLR.AssemblyExecutionMode&)", (Il2CppMethodPointer)GetAssemblyExecutionMode);
         il2cpp::vm::InternalCalls::Add("HybridCLR.AssemblyShadowRuntime::GetDiagnosticsJson(System.String&)", (Il2CppMethodPointer)GetDiagnosticsJson);
         il2cpp::vm::InternalCalls::Add("HybridCLR.AssemblyShadowRuntime::GetTypeResolutionInfo(System.Type,System.String&)", (Il2CppMethodPointer)GetTypeResolutionInfo);
+        il2cpp::vm::InternalCalls::Add("HybridCLR.AssemblyShadowRuntime::GetExecutionDiagnosticsJson(System.String&)", (Il2CppMethodPointer)GetExecutionDiagnosticsJson);
     }
 
     int32_t AssemblyShadowRuntimeApi::ConfigureCandidates(Il2CppString* baselineBuildId,
@@ -294,6 +295,24 @@ namespace hybridclr
         {
             return ErrorCode(AssemblyShadowError::InternalError);
         }
+#endif
+    }
+
+    int32_t AssemblyShadowRuntimeApi::GetExecutionDiagnosticsJson(Il2CppString** json)
+    {
+        if (json) *json = nullptr;
+#if !HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+        return Disabled();
+#else
+        if (!json) return ErrorCode(AssemblyShadowError::InvalidArgument);
+        try
+        {
+            std::string value;
+            AssemblyShadowError result = il2cpp::vm::AssemblyShadow::GetExecutionDiagnosticsJson(value);
+            if (result == AssemblyShadowError::Success) *json = il2cpp::vm::String::New(value.c_str());
+            return ErrorCode(result);
+        }
+        catch (...) { return ErrorCode(AssemblyShadowError::InternalError); }
 #endif
     }
 

@@ -12,6 +12,7 @@
 #include "vm/Class.h"
 #include "vm/Object.h"
 #include "vm/Method.h"
+#include "vm/AssemblyShadow.h"
 
 #include "../metadata/MetadataModule.h"
 #include "../metadata/MetadataUtil.h"
@@ -293,6 +294,9 @@ namespace interpreter
 
 	void InterpreterModule::Managed2NativeCallByReflectionInvoke(const MethodInfo* method, uint16_t* argVarIndexs, StackObject* localVarBase, void* ret)
 	{
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+		il2cpp::vm::AssemblyShadow::RequireActiveMethod(method, "Interpreter.reflectionBridge");
+#endif
 		if (hybridclr::metadata::IsInterpreterImplement(method))
 		{
 			Interpreter::Execute(method,  localVarBase + argVarIndexs[0], ret);
@@ -418,6 +422,9 @@ namespace interpreter
 	
 	static void InterpreterInvoke(Il2CppMethodPointer methodPointer, const MethodInfo* method, void* __this, void** __args, void* __ret)
 	{
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+		il2cpp::vm::AssemblyShadow::RequireActiveMethod(method, "InterpreterInvoke");
+#endif
 		InterpMethodInfo* imi = method->interpData ? (InterpMethodInfo*)method->interpData : InterpreterModule::GetInterpMethodInfo(method);
 		bool isInstanceMethod = metadata::IsInstanceMethod(method);
 		StackObject* args = (StackObject*)alloca(sizeof(StackObject) * imi->argStackObjectSize);
@@ -456,6 +463,9 @@ namespace interpreter
 		{
 			Il2CppDelegate* cur = firstSubDel[i];
 			const MethodInfo* curMethod = cur->method;
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+			il2cpp::vm::AssemblyShadow::RequireActiveMethod(curMethod, "InterpreterDelegateInvoke.target");
+#endif
 			Il2CppObject* curTarget = cur->target;
 			if (curMethod->invoker_method == nullptr)
 			{
@@ -511,6 +521,9 @@ namespace interpreter
 	#else
 	static void* InterpreterInvoke(Il2CppMethodPointer methodPointer, const MethodInfo* method, void* __this, void** __args)
 	{
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+		il2cpp::vm::AssemblyShadow::RequireActiveMethod(method, "InterpreterInvoke");
+#endif
 		InterpMethodInfo* imi = method->interpData ? (InterpMethodInfo*)method->interpData : InterpreterModule::GetInterpMethodInfo(method);
 		StackObject* args = (StackObject*)alloca(sizeof(StackObject) * imi->argStackObjectSize);
 		bool isInstanceMethod = metadata::IsInstanceMethod(method);
@@ -558,6 +571,9 @@ namespace interpreter
 		{
 			Il2CppDelegate* cur = firstSubDel[i];
 			const MethodInfo* curMethod = cur->method;
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+			il2cpp::vm::AssemblyShadow::RequireActiveMethod(curMethod, "InterpreterDelegateInvoke.target");
+#endif
 			Il2CppObject* curTarget = cur->target;
 			if (curMethod->invoker_method == nullptr)
 			{
@@ -644,10 +660,13 @@ namespace interpreter
 
 		il2cpp::vm::Class::Init(methodInfo->klass);
 		InterpMethodInfo* imi = transform::HiTransform::Transform(methodInfo);
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+		// A cached lookup is not a transformation. Count only successful creation.
+		if (imi) il2cpp::vm::AssemblyShadow::ObserveInterpreterTransformation(methodInfo);
+#endif
 		il2cpp::os::Atomic::FullMemoryBarrier();
 		const_cast<MethodInfo*>(methodInfo)->interpData = imi;
 		return imi;
 	}
 }
 }
-
