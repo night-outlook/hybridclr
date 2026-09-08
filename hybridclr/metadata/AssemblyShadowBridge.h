@@ -4,6 +4,7 @@
 
 #if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
 #include <stdint.h>
+#include <stdexcept>
 #include <vector>
 
 struct Il2CppAssembly;
@@ -14,6 +15,16 @@ class InterpreterImage;
 struct StagedAssembly;
 using StagingResolver = const Il2CppAssembly* (*)(const char*, void*);
 using StagingFacadeResolver = bool (*)(const char*, std::vector<const Il2CppAssembly*>&, void*);
+
+// A metadata parser must not construct a managed exception while the private
+// resolver forbids managed execution. Carry its diagnostic to the staging
+// boundary without changing the treatment of unrelated native failures.
+class StagedMetadataFailure : public std::runtime_error
+{
+public:
+    explicit StagedMetadataFailure(const char* detail)
+        : std::runtime_error(detail ? detail : "Invalid metadata during Assembly Shadow staging.") {}
+};
 
 class ScopedStagingResolver
 {

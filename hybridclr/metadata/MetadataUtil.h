@@ -10,6 +10,7 @@
 #include "../CommonDef.h"
 #include "MetadataDef.h"
 #include "InterpreterImageBudget.h"
+#include "AssemblyShadowBridge.h"
 
 namespace hybridclr
 {
@@ -483,6 +484,10 @@ namespace metadata
 
     inline void RaiseBadImageException(const char* msg = nullptr)
     {
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+        if (AssemblyShadowBridge::IsStaging())
+            throw StagedMetadataFailure(msg);
+#endif
         il2cpp::vm::Exception::Raise(il2cpp::vm::Exception::GetBadImageFormatException(msg));
     }
 #pragma endregion

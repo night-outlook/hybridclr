@@ -317,9 +317,38 @@ AssemblyShadowError ParseIdentity(const byte* dll, size_t size, std::string& nam
 
 std::string ManagedExceptionDetail(const Il2CppExceptionWrapper& error)
 {
-    if (error.ex && error.ex->message)
-        return il2cpp::utils::StringUtils::Utf16ToUtf8(error.ex->message->chars, error.ex->message->length);
-    return "managed exception without a message";
+    // Read the already-captured exception graph directly: managed ToString or
+    // property getters could execute more user code while reporting a failure.
+    // Bound both graph traversal and individual messages, including malformed
+    // cyclic chains, without allocating a separate visited-node collection.
+    const size_t maxDepth = 16;
+    const int32_t maxMessageChars = 1024;
+    const Il2CppException* seen[maxDepth] = {};
+    size_t depth = 0;
+    std::string detail;
+    for (const Il2CppException* current = error.ex; current; current = current->inner_ex)
+    {
+        if (depth) detail += " ---> ";
+        for (size_t index = 0; index < depth; ++index)
+            if (seen[index] == current)
+                return detail + "[exception chain cycle]";
+        if (depth == maxDepth)
+            return detail + "[exception chain depth limit reached]";
+        seen[depth++] = current;
+        const Il2CppString* message = current->message;
+        if (!message || message->length <= 0)
+        {
+            detail += "managed exception without a message";
+            continue;
+        }
+        int32_t length = message->length > maxMessageChars ? maxMessageChars : message->length;
+        // Do not split a UTF-16 surrogate pair at the diagnostic size limit.
+        if (length < message->length && message->chars[length - 1] >= 0xd800 && message->chars[length - 1] <= 0xdbff)
+            --length;
+        detail += il2cpp::utils::StringUtils::Utf16ToUtf8(message->chars, length);
+        if (length < message->length) detail += "[message truncated]";
+    }
+    return depth ? detail : "managed exception without a message";
 }
 
 byte* CopyOwnedBytes(const byte* bytes, size_t size)
@@ -443,6 +472,11 @@ AssemblyShadowError Assembly::InitializeStagedRuntimeMetadata(StagedAssembly* st
         staged->interpreterImage->InitRuntimeMetadatas();
         staged->runtimeMetadataInitialized = true;
         return AssemblyShadowError::Success;
+    }
+    catch (const StagedMetadataFailure& error)
+    {
+        detail = staged->canonicalName + ": " + error.what();
+        return AssemblyShadowError::ReferenceResolutionFailed;
     }
     catch (const Il2CppExceptionWrapper& error)
     {
