@@ -8,6 +8,7 @@
 #endif
 
 #include "Image.h"
+#include "InterpreterImageBudget.h"
 #include "AssemblyShadowAssemblyReference.h"
 #include "CustomAttributeDataWriter.h"
 
@@ -107,7 +108,13 @@ namespace metadata
 
 		static void Initialize();
 
-		static uint32_t AllocImageIndex(uint32_t dllLength);
+		// Caller holds g_MetadataLock, as ordinary Create and private staging do.
+        static uint32_t AllocImageIndex(uint64_t dllLength, bool shadow = false);
+        static InterpreterImageBudget::State GetImageBudgetState(uint64_t& ordinary, uint64_t& shadow, uint64_t& reserved);
+        // The complete batch advances the shared cursor only if every image fits.
+        // Returned indices are retained even if a later transaction aborts.
+        static InterpreterImageBudget::Evaluation ReserveImageBudget(const std::vector<uint64_t>& sizes);
+        static void RecordReservedShadowAllocation();
 
 		static void RegisterImage(InterpreterImage* image);
 

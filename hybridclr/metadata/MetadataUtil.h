@@ -9,6 +9,7 @@
 
 #include "../CommonDef.h"
 #include "MetadataDef.h"
+#include "InterpreterImageBudget.h"
 
 namespace hybridclr
 {
@@ -99,33 +100,33 @@ namespace metadata
 
 #pragma region interpreter metadtata index
 
-    const uint32_t kMetadataIndexBits = 22;
+    const uint32_t kMetadataIndexBits = InterpreterImageBudget::kMetadataIndexBits;
 
-    const uint32_t kMetadataKindBits = 2;
+    const uint32_t kMetadataKindBits = InterpreterImageBudget::kMetadataKindBits;
 
     const uint32_t kMetadataKindShiftBits = 32 - kMetadataKindBits;
 
     const uint32_t kMetadataImageIndexShiftBits = kMetadataIndexBits;
 
-    const uint32_t kMetadataImageIndexExtraShiftBitsA = 6;
-    const uint32_t kMetadataImageIndexExtraShiftBitsB = 4;
-    const uint32_t kMetadataImageIndexExtraShiftBitsC = 2;
-    const uint32_t kMetadataImageIndexExtraShiftBitsD = 0;
+    const uint32_t kMetadataImageIndexExtraShiftBitsA = InterpreterImageBudget::kMetadataImageIndexExtraShiftBitsA;
+    const uint32_t kMetadataImageIndexExtraShiftBitsB = InterpreterImageBudget::kMetadataImageIndexExtraShiftBitsB;
+    const uint32_t kMetadataImageIndexExtraShiftBitsC = InterpreterImageBudget::kMetadataImageIndexExtraShiftBitsC;
+    const uint32_t kMetadataImageIndexExtraShiftBitsD = InterpreterImageBudget::kMetadataImageIndexExtraShiftBitsD;
     extern const uint32_t kMetadataImageIndexExtraShiftBitsArr[4];
 
-    const uint32_t kMetadataIndexMaskA = (1 << (kMetadataIndexBits + kMetadataImageIndexExtraShiftBitsA)) - 1;
-    const uint32_t kMetadataIndexMaskB = (1 << (kMetadataIndexBits + kMetadataImageIndexExtraShiftBitsB)) - 1;
-    const uint32_t kMetadataIndexMaskC = (1 << (kMetadataIndexBits + kMetadataImageIndexExtraShiftBitsC)) - 1;
-    const uint32_t kMetadataIndexMaskD = (1 << (kMetadataIndexBits + kMetadataImageIndexExtraShiftBitsD)) - 1;
+    const uint32_t kMetadataIndexMaskA = InterpreterImageBudget::kMetadataIndexMaskA;
+    const uint32_t kMetadataIndexMaskB = InterpreterImageBudget::kMetadataIndexMaskB;
+    const uint32_t kMetadataIndexMaskC = InterpreterImageBudget::kMetadataIndexMaskC;
+    const uint32_t kMetadataIndexMaskD = InterpreterImageBudget::kMetadataIndexMaskD;
     extern const uint32_t kMetadataIndexMaskArr[4];
 
-    const uint32_t kMetadataImageIndexBits = 32 - kMetadataIndexBits;
+    const uint32_t kMetadataImageIndexBits = InterpreterImageBudget::kMetadataImageIndexBits;
 
     const uint32_t kMaxMetadataImageCount = (1 << kMetadataImageIndexBits);
 
-    const uint32_t kMaxMetadataImageIndexWithoutKind = 1u << (kMetadataImageIndexBits - kMetadataKindBits);
+    const uint32_t kMaxMetadataImageIndexWithoutKind = InterpreterImageBudget::kMaxMetadataImageIndexWithoutKind;
 
-    const uint32_t kInvalidImageIndex = 0;
+    const uint32_t kInvalidImageIndex = InterpreterImageBudget::kInvalidImageIndex;
 
     const int32_t kInvalidIndex = -1;
 

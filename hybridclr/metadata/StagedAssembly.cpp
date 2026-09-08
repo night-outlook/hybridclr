@@ -343,7 +343,7 @@ AssemblyShadowError Assembly::ReadStagedAssemblyIdentity(const byte* dll, size_t
 }
 
 AssemblyShadowError Assembly::CreateStagedSkeleton(const byte* dll, size_t dllLength, const byte* pdb, size_t pdbLength,
-    StagedAssembly*& staged, std::string& detail)
+    StagedAssembly*& staged, std::string& detail, uint32_t reservedImageIndex)
 {
     staged = nullptr;
     detail.clear();
@@ -376,7 +376,8 @@ AssemblyShadowError Assembly::CreateStagedSkeleton(const byte* dll, size_t dllLe
         staged->canonicalName.swap(name);
         staged->mvid.swap(mvid);
         staged->references.swap(references);
-        uint32_t index = InterpreterImage::AllocImageIndex(static_cast<uint32_t>(dllLength));
+        uint32_t index = reservedImageIndex ? reservedImageIndex : InterpreterImage::AllocImageIndex(dllLength, true);
+        if (reservedImageIndex) InterpreterImage::RecordReservedShadowAllocation();
         if (index == kInvalidImageIndex)
         {
             detail = "Interpreter image index capacity exhausted";

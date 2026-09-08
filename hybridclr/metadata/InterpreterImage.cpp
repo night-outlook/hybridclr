@@ -39,48 +39,53 @@ namespace hybridclr
 namespace metadata
 {
 
-	static uint32_t s_nextImageIndexByKind[4] = { (1u << kMetadataImageIndexExtraShiftBitsA), 0, 0, 0};
+    using ImageBudget = InterpreterImageBudget;
+    static ImageBudget::State s_imageBudget = ImageBudget::FreshState();
+    static uint64_t s_ordinaryImageAllocations = 0;
+    static uint64_t s_shadowImageAllocations = 0;
+    static uint64_t s_reservedImageCount = 0;
 
-	InterpreterImage* InterpreterImage::s_images[kMaxMetadataImageCount] = {};
+    InterpreterImage* InterpreterImage::s_images[kMaxMetadataImageCount] = {};
 
-	static int32_t GetImageKindByDllLength(uint32_t dllLength)
-	{
-		uint32_t maxPossibleIndexValue = dllLength * 4;
-		for (int32_t i = 3; i >= 0; i--)
-		{
-			if (maxPossibleIndexValue <= kMetadataIndexMaskArr[i])
-			{
-				return i;
-			}
-		}
-		return -1;
-	}
+    void InterpreterImage::Initialize() {}
 
-	void InterpreterImage::Initialize()
-	{
-		
-	}
+    uint32_t InterpreterImage::AllocImageIndex(uint64_t dllLength, bool shadow)
+    {
+        const auto allocation = ImageBudget::TryAllocate(s_imageBudget, dllLength);
+        if (allocation.IsSuccess())
+        {
+            if (shadow) ++s_shadowImageAllocations;
+            else ++s_ordinaryImageAllocations;
+        }
+        return allocation.imageIndex;
+    }
 
-	uint32_t InterpreterImage::AllocImageIndex(uint32_t dllLength)
-	{
-		int32_t kind = GetImageKindByDllLength(dllLength);
-		if (kind < 0)
-		{
-			return kInvalidImageIndex;
-		}
-		for (int32_t finalKind = kind; finalKind >= 0; finalKind--)
-		{
-			uint32_t newImageIndex = s_nextImageIndexByKind[finalKind];
-			// 255 is preserved for invalid image index when kind is 3
-			if (newImageIndex >= kMaxMetadataImageIndexWithoutKind - (finalKind == 3))
-			{
-				continue;
-			}
-			s_nextImageIndexByKind[finalKind] += (1u << kMetadataImageIndexExtraShiftBitsArr[finalKind]);
-			return newImageIndex | ((uint32_t)finalKind << (kMetadataImageIndexBits - kMetadataKindBits));
-		}
-		return kInvalidImageIndex;
-	}
+    ImageBudget::State InterpreterImage::GetImageBudgetState(uint64_t& ordinary, uint64_t& shadow, uint64_t& reserved)
+    {
+        il2cpp::os::FastAutoLock lock(&il2cpp::vm::g_MetadataLock);
+        ordinary = s_ordinaryImageAllocations;
+        shadow = s_shadowImageAllocations;
+        reserved = s_reservedImageCount;
+        return s_imageBudget;
+    }
+
+    ImageBudget::Evaluation InterpreterImage::ReserveImageBudget(const std::vector<uint64_t>& sizes)
+    {
+        il2cpp::os::FastAutoLock lock(&il2cpp::vm::g_MetadataLock);
+        auto report = ImageBudget::Evaluate(s_imageBudget, sizes);
+        if (report.IsSuccess())
+        {
+            s_imageBudget = report.finalState;
+            s_reservedImageCount += sizes.size();
+        }
+        return report;
+    }
+
+    void InterpreterImage::RecordReservedShadowAllocation()
+    {
+        // Caller holds the metadata lock. Reservation remains permanently charged.
+        ++s_shadowImageAllocations;
+    }
 
 	void InterpreterImage::RegisterImage(InterpreterImage* image)
 	{

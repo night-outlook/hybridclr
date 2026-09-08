@@ -24,5 +24,8 @@ namespace hybridclr
         static int32_t GetDiagnosticsJson(Il2CppString** json);
         static int32_t GetTypeResolutionInfo(Il2CppReflectionType* type, Il2CppString** json);
         static int32_t GetExecutionDiagnosticsJson(Il2CppString** json);
+        static int32_t GetMetadataCapacityJson(Il2CppArray* dllSizes, Il2CppString** json);
+        static int32_t ReserveMetadataBudget(Il2CppArray* orderedDllSizes, int32_t profileVersion);
+        static int32_t GetRecoveryInfoJson(Il2CppString** json);
     };
 }

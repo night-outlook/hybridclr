@@ -113,7 +113,7 @@ namespace metadata
             il2cpp::vm::Exception::Raise(il2cpp::vm::Exception::GetArgumentNullException("rawAssembly is null"));
         }
 
-        uint32_t imageId = InterpreterImage::AllocImageIndex((uint32_t)length);
+        uint32_t imageId = InterpreterImage::AllocImageIndex(length);
         if (imageId == kInvalidImageIndex)
         {
             il2cpp::vm::Exception::Raise(il2cpp::vm::Exception::GetExecutionEngineException("InterpreterImage::AllocImageIndex failed"));
