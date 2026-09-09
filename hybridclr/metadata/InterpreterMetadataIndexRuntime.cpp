@@ -204,6 +204,12 @@ Runtime::Error Runtime::Decode(int32_t token, Codec::DecodedData& output)
     return owner == 0 ? Error::OwnerRequired : current->codec.Decode(token, owner, output);
 }
 
+bool Runtime::TokenBelongsToImageForVisibility(int32_t token, uint32_t expectedImageId)
+{
+    RuntimeState* current = Ready();
+    return current && current->codec.TokenBelongsToImageForVisibility(token, expectedImageId);
+}
+
 Runtime::Error Runtime::Finalize(uint32_t imageId, uint64_t lowEnd)
 {
     RuntimeState* current = Ready();

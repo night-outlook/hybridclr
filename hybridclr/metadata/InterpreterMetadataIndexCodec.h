@@ -487,6 +487,24 @@ public:
         return Error::None;
     }
 
+    // Visibility filtering needs retained provenance, including after Abort.
+    // This predicate grants no decoding or image-resolution authority and
+    // returns neither a raw coordinate nor an owner. Bindings are never reused.
+    bool TokenBelongsToImageForVisibility(int32_t token, uint32_t expectedImageId) const
+    {
+        if (!valid_ || expectedImageId == 0 || expectedImageId > kMaxImageCount)
+            return false;
+        uint32_t slot = 0;
+        uint32_t ignoredOffset = 0;
+        if (DecodeToken(token, slot, ignoredOffset) != Error::None)
+            return false;
+        const PageDescriptor& descriptor = descriptors_[slot];
+        if (descriptor.bound.load(std::memory_order_acquire) == 0)
+            return false;
+        const ImageRecord* image = descriptor.record.load(std::memory_order_acquire);
+        return image && image->imageId == expectedImageId;
+    }
+
     Error TryAddOffset(const int32_t token, int64_t delta, uint64_t caller,
         int32_t& output) const
     {

@@ -21,6 +21,8 @@ public:
     static Error ReserveImages(uint32_t count, std::vector<Reservation>& output);
     static Error Encode(uint32_t imageId, int64_t rawIndex, int32_t& output);
     static Error Decode(int32_t token, Codec::DecodedData& output);
+    // Provenance-only filtering; never grants private metadata access.
+    static bool TokenBelongsToImageForVisibility(int32_t token, uint32_t expectedImageId);
     static Error Finalize(uint32_t imageId, uint64_t lowEnd);
     static Error Publish(uint32_t imageId);
     static Error PublishBatch(const uint32_t* imageIds, std::size_t count);
