@@ -1,6 +1,7 @@
 #include "RuntimeConfig.h"
 
 #include "vm/Exception.h"
+#include "vm/AssemblyShadowTypes.h"
 
 namespace hybridclr
 {
@@ -29,6 +30,18 @@ namespace hybridclr
 			return s_maxMethodInlineDepth;
 		case RuntimeOptionId::MaxInlineableMethodBodySize:
 			return s_maxInlineableMethodBodySize;
+		case RuntimeOptionId::AssemblyShadowMetadataBudgetCapabilityVersion:
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+			return il2cpp::vm::kAssemblyShadowMetadataBudgetCapabilityVersion;
+#else
+			return 0;
+#endif
+		case RuntimeOptionId::AssemblyShadowRecoveryCapabilityVersion:
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+			return il2cpp::vm::kAssemblyShadowRecoveryCapabilityVersion;
+#else
+			return 0;
+#endif
 		default:
 		{
 			TEMP_FORMAT(optionIdStr, "%d", optionId);
@@ -60,6 +73,13 @@ namespace hybridclr
 		case RuntimeOptionId::MaxInlineableMethodBodySize:
 			s_maxInlineableMethodBodySize = value;
 			break;
+		case RuntimeOptionId::AssemblyShadowMetadataBudgetCapabilityVersion:
+		case RuntimeOptionId::AssemblyShadowRecoveryCapabilityVersion:
+		{
+			TEMP_FORMAT(optionIdStr, "%d", optionId);
+			il2cpp::vm::Exception::Raise(il2cpp::vm::Exception::GetArgumentException(optionIdStr, "read-only runtime option id"));
+			break;
+		}
 		default:
 		{
 			TEMP_FORMAT(optionIdStr, "%d", optionId);

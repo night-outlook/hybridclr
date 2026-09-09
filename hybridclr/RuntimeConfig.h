@@ -12,6 +12,9 @@ namespace hybridclr
 		MaxMethodBodyCacheSize = 4,
 		MaxMethodInlineDepth = 5,
 		MaxInlineableMethodBodySize = 6,
+		// Read-only capability queries. Zero means Assembly Shadow is compiled out.
+		AssemblyShadowMetadataBudgetCapabilityVersion = 7,
+		AssemblyShadowRecoveryCapabilityVersion = 8,
 	};
 
 	class RuntimeConfig
@@ -30,6 +33,5 @@ namespace hybridclr
 		static int32_t GetMaxInlineableMethodBodySize();
 	};
 }
-
 
 
