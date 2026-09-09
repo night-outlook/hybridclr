@@ -1,16 +1,21 @@
 #pragma once
 
 #include <unordered_map>
+#include "vm/MetadataLock.h"
 
 #if HYBRIDCLR_UNITY_2021_OR_NEW
 #include "metadata/CustomAttributeDataReader.h"
 #include "CustomAttributeDataWriter.h"
+#include "CustomAttributeTypeIndexBatch.h"
 #endif
 
 #include "Image.h"
-#include "InterpreterImageBudget.h"
+#include "InterpreterImageAdmission.h"
+#include "InterpreterMetadataIndexRuntime.h"
+#include "InterpreterGenericConstraintMap.h"
 #include "AssemblyShadowAssemblyReference.h"
 #include "CustomAttributeDataWriter.h"
+#include "CustomAttributeTypeIndexBatch.h"
 
 namespace hybridclr
 {
@@ -110,30 +115,34 @@ namespace metadata
 
 		// Caller holds g_MetadataLock, as ordinary Create and private staging do.
         static uint32_t AllocImageIndex(uint64_t dllLength, bool shadow = false);
-        static InterpreterImageBudget::State GetImageBudgetState(uint64_t& ordinary, uint64_t& shadow, uint64_t& reserved);
-        // The complete batch advances the shared cursor only if every image fits.
-        // Returned indices are retained even if a later transaction aborts.
-        static InterpreterImageBudget::Evaluation ReserveImageBudget(const std::vector<uint64_t>& sizes);
+        static InterpreterImageAdmission::Report ReserveImageBudget(
+            const std::vector<uint64_t>& sizes, std::vector<uint32_t>& imageIndices,
+            InterpreterMetadataIndexRuntime::Error& runtimeError);
+        static InterpreterMetadataIndexRuntime::Error GetMetadataIndexStats(
+            InterpreterMetadataIndexRuntime::Codec::Stats& stats);
+        static InterpreterMetadataIndexRuntime::Error GetMetadataCapacitySnapshot(
+            InterpreterMetadataIndexRuntime::Codec::Stats& stats,
+            uint64_t& ordinary, uint64_t& shadow, uint64_t& reserved);
+        static void GetImageAllocationCounts(uint64_t& ordinary, uint64_t& shadow, uint64_t& reserved);
         static void RecordReservedShadowAllocation();
 
-		static void RegisterImage(InterpreterImage* image);
+		static InterpreterMetadataIndexRuntime::Error FinalizeImage(InterpreterImage* image);
+		static InterpreterMetadataIndexRuntime::Error RegisterImage(InterpreterImage* image);
+        static InterpreterMetadataIndexRuntime::Error RegisterImagesBatch(const uint32_t* imageIndices, size_t count);
+        static InterpreterMetadataIndexRuntime::Error AbortImage(uint32_t imageIndex);
 
 		static InterpreterImage* GetImage(uint32_t imageIndex)
 		{
-			//os::FastAutoLock lock(&s_imageLock);
-			IL2CPP_ASSERT(imageIndex < kMaxMetadataImageCount);
-			return s_images[imageIndex];
+			if (InterpreterImage* constructing = InterpreterMetadataIndexRuntime::GetConstructionImage(imageIndex))
+                return constructing;
+            return InterpreterMetadataIndexRuntime::GetPublishedImage(imageIndex);
 		}
-
-	private:
-
-		static InterpreterImage* s_images[kMaxMetadataImageCount];
 
 	public:
 
 		InterpreterImage(uint32_t imageIndex) : _index(imageIndex), _inited(false), _il2cppImage(nullptr)
 #if HYBRIDCLR_UNITY_2021_OR_NEW
-			, _constValues(1024), _il2cppFormatCustomDataBlob(256), _tempCtorArgBlob(256), _tempFieldBlob(256), _tempPropertyBlob(256)
+			, _constValues(1024)
 #endif
 		{
 
@@ -242,7 +251,7 @@ namespace metadata
 
 		uint32_t GetTypeRawIndexByEncodedIl2CppTypeIndex(int32_t il2cppTypeIndex) const
 		{
-			return GetTypeRawIndex((const Il2CppTypeDefinition*)_types[DecodeMetadataIndex(il2cppTypeIndex)]->data.typeHandle);
+			return GetTypeRawIndex((const Il2CppTypeDefinition*)GetIl2CppTypeFromRawIndex(DecodeMetadataIndex(il2cppTypeIndex))->data.typeHandle);
 		}
 
 		const Il2CppTypeDefinition* GetTypeFromRawIndex(uint32_t index) const
@@ -253,6 +262,7 @@ namespace metadata
 
 		const Il2CppType* GetIl2CppTypeFromRawIndex(uint32_t index) const
 		{
+			il2cpp::os::FastAutoLock lock(&il2cpp::vm::g_MetadataLock);
 			IL2CPP_ASSERT((size_t)index < _types.size());
 			return _types[index];
 		}
@@ -260,7 +270,7 @@ namespace metadata
 		const Il2CppType* GetIl2CppTypeFromRawTypeDefIndex(uint32_t index) override
 		{
 			IL2CPP_ASSERT(index < (uint32_t)_typesDefines.size());
-			return _types[DecodeMetadataIndex(_typesDefines[index].byvalTypeIndex)];
+			return GetIl2CppTypeFromRawIndex(DecodeMetadataIndex(_typesDefines[index].byvalTypeIndex));
 		}
 
 		const Il2CppFieldDefinition* GetFieldDefinitionFromRawIndex(uint32_t index)
@@ -328,14 +338,35 @@ namespace metadata
 
 		const il2cpp::utils::dynamic_array<MethodImpl> GetTypeMethodImplByTypeDefinition(const Il2CppTypeDefinition* typeDef);
 
-		const Il2CppType* GetGenericParameterConstraintFromIndex(GenericParameterConstraintIndex index)
+		const Il2CppType* GetGenericParameterConstraintFromIndex(const Il2CppGenericParameter* genericParameter, GenericParameterConstraintIndex index)
 		{
-			IL2CPP_ASSERT((size_t)index < _genericConstraints.size());
-			TypeIndex typeIndex = _genericConstraints[index];
+			il2cpp::os::FastAutoLock lock(&il2cpp::vm::g_MetadataLock);
+			if (genericParameter == nullptr || _genericParams.empty())
+			{
+				RaiseBadImageException("invalid interpreter generic parameter handle");
+				return nullptr;
+			}
+
+			uint32_t rawIndex = 0;
+			const InterpreterGenericConstraintMap::Error error = InterpreterGenericConstraintMap::ResolveRawIndex(
+				genericParameter, _index, DecodeImageIndex,
+				_genericParams, _genericConstraintStarts, _genericConstraints.size(), index, rawIndex);
+			if (error != InterpreterGenericConstraintMap::Error::None)
+			{
+				RaiseBadImageException("invalid interpreter generic constraint lookup");
+				return nullptr;
+			}
+			TypeIndex typeIndex = _genericConstraints[rawIndex];
 			if (typeIndex == kTypeIndexInvalid)
 			{
 
-				TbGenericParamConstraint data = _rawImage->ReadGenericParamConstraint(index + 1);
+				TbGenericParamConstraint data = _rawImage->ReadGenericParamConstraint(rawIndex + 1);
+				if (data.owner == 0 || data.owner > _genericParams.size() || data.owner - 1 !=
+					(static_cast<uint32_t>(genericParameter - _genericParams.data())))
+				{
+					RaiseBadImageException("generic constraint row owner does not match parameter");
+					return nullptr;
+				}
 				Il2CppGenericParameter& genericParam = _genericParams[data.owner - 1];
 
 				const Il2CppGenericContainer* klassGc;
@@ -343,7 +374,7 @@ namespace metadata
 				GetClassAndMethodGenericContainerFromGenericContainerIndex(genericParam.ownerIndex, klassGc, methodGc);
 
 				const Il2CppType* paramCons = ReadTypeFromToken(klassGc, methodGc, DecodeTypeDefOrRefOrSpecCodedIndexTableType(data.constraint), DecodeTypeDefOrRefOrSpecCodedIndexRowIndex(data.constraint));
-				_genericConstraints[index] = typeIndex = DecodeMetadataIndex(AddIl2CppTypeCache(paramCons));
+				_genericConstraints[rawIndex] = typeIndex = DecodeMetadataIndex(AddIl2CppTypeCache(paramCons));
 			}
 			return _types[typeIndex];
 		}
@@ -582,14 +613,26 @@ namespace metadata
 			const Il2CppCustomAttributeTypeRange* dataRange = (const Il2CppCustomAttributeTypeRange*)handle;
 			IL2CPP_ASSERT(_tokenCustomAttributes.find(dataRange->token) != _tokenCustomAttributes.end());
 			CustomAttributesInfo& cai = _tokenCustomAttributes[dataRange->token];
-			if (!cai.inited)
+			bool inited = false;
+			{
+				il2cpp::os::FastAutoLock metaLock(&il2cpp::vm::g_MetadataLock);
+				inited = cai.inited;
+			}
+			if (!inited)
 			{
 				InitCustomAttributeData(cai, *dataRange);
 			}
+			void* dataStartPtr = nullptr;
+			void* dataEndPtr = nullptr;
+			{
+				il2cpp::os::FastAutoLock metaLock(&il2cpp::vm::g_MetadataLock);
+				dataStartPtr = cai.dataStartPtr;
+				dataEndPtr = cai.dataEndPtr;
+			}
 #if HYBRIDCLR_UNITY_2022_OR_NEW
-			return il2cpp::metadata::CustomAttributeDataReader(_il2cppImage, cai.dataStartPtr, cai.dataEndPtr);
+			return il2cpp::metadata::CustomAttributeDataReader(_il2cppImage, dataStartPtr, dataEndPtr);
 #else
-			return il2cpp::metadata::CustomAttributeDataReader(cai.dataStartPtr, cai.dataEndPtr);
+			return il2cpp::metadata::CustomAttributeDataReader(dataStartPtr, dataEndPtr);
 #endif
 		}
 
@@ -597,11 +640,23 @@ namespace metadata
 		{
 			IL2CPP_ASSERT(_tokenCustomAttributes.find(dataRange->token) != _tokenCustomAttributes.end());
 			CustomAttributesInfo& cai = _tokenCustomAttributes[dataRange->token];
-			if (!cai.inited)
+			bool inited = false;
+			{
+				il2cpp::os::FastAutoLock metaLock(&il2cpp::vm::g_MetadataLock);
+				inited = cai.inited;
+			}
+			if (!inited)
 			{
 				InitCustomAttributeData(cai, *dataRange);
 			}
-			return std::tuple<void*, void*>(cai.dataStartPtr, cai.dataEndPtr);
+			void* dataStartPtr = nullptr;
+			void* dataEndPtr = nullptr;
+			{
+				il2cpp::os::FastAutoLock metaLock(&il2cpp::vm::g_MetadataLock);
+				dataStartPtr = cai.dataStartPtr;
+				dataEndPtr = cai.dataEndPtr;
+			}
+			return std::tuple<void*, void*>(dataStartPtr, dataEndPtr);
 		}
 
 		std::tuple<void*, void*> CreateCustomAttributeDataTupleByToken(uint32_t token)
@@ -622,11 +677,11 @@ namespace metadata
 #endif
 
 		void BuildCustomAttributesData(CustomAttributesInfo& cai, const Il2CppCustomAttributeTypeRange& typeRange);
-		void ConvertILCustomAttributeData2Il2CppFormat(const MethodInfo* ctorMethod, BlobReader& reader);
-		void ConvertFixedArg(CustomAttributeDataWriter& writer, BlobReader& reader, const Il2CppType* type, bool writeType);
-		void ConvertBoxedValue(CustomAttributeDataWriter& writer, BlobReader& reader, bool writeType);
-		void ConvertSystemType(CustomAttributeDataWriter& writer, BlobReader& reader, bool writeType);
-		void WriteEncodeTypeEnum(CustomAttributeDataWriter& writer, const Il2CppType* type);
+		void ConvertILCustomAttributeData2Il2CppFormat(CustomAttributeDataWriter& writer, CustomAttributeTypeIndexBatch& typeBatch, const MethodInfo* ctorMethod, BlobReader& reader);
+		void ConvertFixedArg(CustomAttributeDataWriter& writer, CustomAttributeTypeIndexBatch& typeBatch, BlobReader& reader, const Il2CppType* type, bool writeType);
+		void ConvertBoxedValue(CustomAttributeDataWriter& writer, CustomAttributeTypeIndexBatch& typeBatch, BlobReader& reader, bool writeType);
+		void ConvertSystemType(CustomAttributeDataWriter& writer, CustomAttributeTypeIndexBatch& typeBatch, BlobReader& reader, bool writeType);
+		void WriteEncodeTypeEnum(CustomAttributeDataWriter& writer, CustomAttributeTypeIndexBatch& typeBatch, const Il2CppType* type);
 		void GetFieldDeclaringTypeIndexAndFieldIndexByName(const Il2CppTypeDefinition* declaringType, const char* name, int32_t& typeIndex, int32_t& fieldIndex);
 		void GetPropertyDeclaringTypeIndexAndPropertyIndexByName(const Il2CppTypeDefinition* declaringType, const char* name, int32_t& typeIndex, int32_t& fieldIndex);
 #endif
@@ -662,14 +717,24 @@ namespace metadata
 		void ReadFieldRefInfoFromFieldDefToken(uint32_t rowIndex, FieldRefInfo& ret) override;
 		void ReadMethodDefSig(BlobReader& reader, const Il2CppGenericContainer* klassGenericContainer, const Il2CppGenericContainer* methodGenericContainer, Il2CppMethodDefinition& methodDef, std::vector<ParamDetail>& paramArr);
 
-		void InitBasic(Il2CppImage* image, bool publish = true);
+		void InitBasic(Il2CppImage* image, bool publish = false);
 		void BuildIl2CppImage(Il2CppImage* image);
 		void BuildIl2CppAssembly(Il2CppAssembly* assembly);
+        void RebindIl2CppAssembly(Il2CppAssembly* assembly)
+        {
+            IL2CPP_ASSERT(_il2cppImage && assembly);
+            _il2cppImage->assembly = assembly;
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+            _referenceRequester = assembly;
+#endif
+        }
 #if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
 		void BindStagedAssemblyReferences();
 #endif
 
 		void InitRuntimeMetadatas() override;
+		// Call only after runtime metadata initialization, before codec publication.
+		uint64_t ComputeFinalIndexLowEnd() const;
 	protected:
 
 		void InitTypeDefs_0();
@@ -748,6 +813,9 @@ namespace metadata
 		std::vector<Il2CppParameterDefaultValue> _paramDefaultValues;
 
 		std::vector<Il2CppGenericParameter> _genericParams;
+		// Interpreter constraint rows use raw metadata offsets because the public
+		// Il2CppGenericParameter field remains the native int16_t AOT layout.
+		std::vector<uint32_t> _genericConstraintStarts;
 		std::vector<TypeIndex> _genericConstraints; // raw TypeIndex
 		std::vector<Il2CppGenericContainer> _genericContainers;
 
@@ -769,12 +837,6 @@ namespace metadata
 		std::vector<Il2CppCustomAttributeTypeRange> _customAttributeHandles;
 #if !HYBRIDCLR_UNITY_2022_OR_NEW
 		std::vector<CustomAttributesCache*> _customAttribtesCaches;
-#endif
-#if HYBRIDCLR_UNITY_2021_OR_NEW
-		CustomAttributeDataWriter _il2cppFormatCustomDataBlob;
-		CustomAttributeDataWriter _tempCtorArgBlob;
-		CustomAttributeDataWriter _tempFieldBlob;
-		CustomAttributeDataWriter _tempPropertyBlob;
 #endif
 		std::vector<CustomAttribute> _customAttribues;
 

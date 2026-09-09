@@ -3,6 +3,7 @@
 #if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
 #include "InterpreterImage.h"
 #include "StagedAssembly.h"
+#include "vm/AssemblyShadow.h"
 
 namespace hybridclr { namespace metadata {
 
@@ -33,6 +34,13 @@ InterpreterImage* AssemblyShadowBridge::GetPrivateImage(uint32_t imageIndex)
             if (staged && staged->interpreterImage && staged->interpreterImage->GetIndex() == imageIndex)
                 return staged->interpreterImage;
     return nullptr;
+}
+
+bool AssemblyShadowBridge::IsPublicImage(uint32_t imageIndex, InterpreterImage* image)
+{
+    return image && image->GetIndex() == imageIndex && image->GetIl2CppImage() &&
+        image->GetIl2CppImage()->assembly &&
+        il2cpp::vm::AssemblyShadow::IsActiveShadow(image->GetIl2CppImage()->assembly);
 }
 
 bool AssemblyShadowBridge::TryResolveForCurrentThread(const char* name, const Il2CppAssembly*& result)

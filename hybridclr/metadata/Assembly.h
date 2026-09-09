@@ -27,6 +27,7 @@ namespace metadata
         static il2cpp::vm::AssemblyShadowError CreateStagedSkeleton(const byte* dll, size_t dllLength, const byte* pdb, size_t pdbLength, StagedAssembly*& staged, std::string& detail, uint32_t reservedImageIndex = 0);
         static il2cpp::vm::AssemblyShadowError InitializeStagedRuntimeMetadata(StagedAssembly* staged, std::string& detail);
         static void PublishStagedImage(StagedAssembly* staged);
+        static bool PublishStagedImagesBatch(const std::vector<uint32_t>& imageIndices);
         static il2cpp::vm::AssemblyShadowError RunStagedModuleInitializer(StagedAssembly* staged, std::string& detail);
 #endif
         static LoadImageErrorCode LoadMetadataForAOTAssembly(const void* dllBytes, uint32_t dllSize, HomologousImageMode mode);

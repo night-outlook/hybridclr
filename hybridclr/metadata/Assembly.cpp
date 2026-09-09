@@ -25,6 +25,53 @@ namespace hybridclr
 namespace metadata
 {
 
+    namespace
+    {
+        class ImageReservationGuard
+        {
+        public:
+            explicit ImageReservationGuard(uint32_t imageId) : _imageId(imageId), _retained(false) {}
+            ~ImageReservationGuard()
+            {
+                if (!_retained && _imageId != kInvalidImageIndex)
+                    InterpreterImage::AbortImage(_imageId);
+            }
+            void Retain() { _retained = true; }
+        private:
+            uint32_t _imageId;
+            bool _retained;
+        };
+
+        struct PlaceholderPublication
+        {
+            Il2CppAssembly* placeHolder;
+            Il2CppAssembly* privateAssembly;
+            InterpreterImage* image;
+            Il2CppAssembly backup;
+        };
+
+        static void CommitPlaceholder(void* context)
+        {
+            PlaceholderPublication& publication = *static_cast<PlaceholderPublication*>(context);
+            *publication.placeHolder = *publication.privateAssembly;
+            publication.placeHolder->image = publication.privateAssembly->image;
+            publication.image->RebindIl2CppAssembly(publication.placeHolder);
+        }
+
+        static bool PublishPlaceholderImage(void* context)
+        {
+            PlaceholderPublication& publication = *static_cast<PlaceholderPublication*>(context);
+            return InterpreterImage::RegisterImage(publication.image) == InterpreterMetadataIndexRuntime::Error::None;
+        }
+
+        static void RollbackPlaceholder(void* context)
+        {
+            PlaceholderPublication& publication = *static_cast<PlaceholderPublication*>(context);
+            *publication.placeHolder = publication.backup;
+            publication.image->RebindIl2CppAssembly(publication.privateAssembly);
+        }
+    }
+
     std::vector<Il2CppAssembly*> s_placeHolderAssembies;
 
 #if ENABLE_PLACEHOLDER_DLL == 1
@@ -118,7 +165,9 @@ namespace metadata
         {
             il2cpp::vm::Exception::Raise(il2cpp::vm::Exception::GetExecutionEngineException("InterpreterImage::AllocImageIndex failed"));
         }
+        ImageReservationGuard reservationGuard(imageId);
         InterpreterImage* image = new InterpreterImage(imageId);
+        InterpreterMetadataIndexRuntime::ScopedConstruction construction(imageId, image, false);
         
         assemblyData = (const byte*)CopyBytes(assemblyData, length);
         LoadImageErrorCode err = image->Load(assemblyData, (size_t)length);
@@ -144,36 +193,48 @@ namespace metadata
         TbAssembly data = image->GetRawImage().ReadAssembly(1);
         const char* nameNoExt = image->GetStringFromRawIndex(data.name);
 
-        Il2CppAssembly* ass;
-        Il2CppImage* image2;
-        if ((ass = FindPlaceHolderAssembly(nameNoExt)) != nullptr)
+        Il2CppAssembly* placeHolder = FindPlaceHolderAssembly(nameNoExt);
+        if (placeHolder && placeHolder->token)
         {
-            if (ass->token)
-            {
-                RaiseExecutionEngineException("reloading placeholder assembly is not supported!");
-            }
-            image2 = ass->image;
-            HYBRIDCLR_FREE((void*)ass->image->name);
-            HYBRIDCLR_FREE((void*)ass->image->nameNoExt);
+            RaiseExecutionEngineException("reloading placeholder assembly is not supported!");
         }
-        else
-        {
-            ass = new (HYBRIDCLR_MALLOC_ZERO(sizeof(Il2CppAssembly))) Il2CppAssembly;
-            image2 = new (HYBRIDCLR_MALLOC_ZERO(sizeof(Il2CppImage))) Il2CppImage;
-        }
+        // Build against fresh, unreachable objects. Placeholder identity is
+        // committed only after private metadata construction and footprint
+        // sealing have completed successfully.
+        Il2CppAssembly* privateAssembly = new (HYBRIDCLR_MALLOC_ZERO(sizeof(Il2CppAssembly))) Il2CppAssembly;
+        Il2CppImage* image2 = new (HYBRIDCLR_MALLOC_ZERO(sizeof(Il2CppImage))) Il2CppImage;
 
-        image->InitBasic(image2);
-        image->BuildIl2CppAssembly(ass);
-        ass->image = image2;
+        image->InitBasic(image2, false);
+        image->BuildIl2CppAssembly(privateAssembly);
+        privateAssembly->image = image2;
 
         image->BuildIl2CppImage(image2);
-        image2->name = ConcatNewString(ass->aname.name, ".dll");
-        image2->nameNoExt = ass->aname.name;
-        image2->assembly = ass;
+        image2->name = ConcatNewString(privateAssembly->aname.name, ".dll");
+        image2->nameNoExt = privateAssembly->aname.name;
+        image2->assembly = privateAssembly;
 
         image->InitRuntimeMetadatas();
 
-        il2cpp::vm::MetadataCache::RegisterInterpreterAssembly(ass);
+        if (InterpreterImage::FinalizeImage(image) != InterpreterMetadataIndexRuntime::Error::None)
+            RaiseExecutionEngineException("failed to seal interpreter metadata index footprint");
+        Il2CppAssembly* ass = placeHolder ? placeHolder : privateAssembly;
+        il2cpp::vm::MetadataCache::PrepareInterpreterAssemblyRegistration(ass);
+
+        if (placeHolder)
+        {
+            PlaceholderPublication publication{ placeHolder, privateAssembly, image, *placeHolder };
+            if (!il2cpp::vm::Assembly::PublishInterpreterPlaceholder(
+                CommitPlaceholder, PublishPlaceholderImage, RollbackPlaceholder, &publication))
+                RaiseExecutionEngineException("failed to publish interpreter placeholder image");
+        }
+        else if (InterpreterImage::RegisterImage(image) != InterpreterMetadataIndexRuntime::Error::None)
+            RaiseExecutionEngineException("failed to publish interpreter metadata image");
+
+        if (placeHolder)
+            HYBRIDCLR_FREE(privateAssembly);
+        else
+            il2cpp::vm::MetadataCache::RegisterInterpreterAssembly(ass);
+        reservationGuard.Retain();
         return ass;
     }
 

@@ -65,10 +65,10 @@ namespace metadata
 
 		void ComputeVtables(Il2CppType2TypeDeclaringTreeMap& cache);
 		void ComputAotTypeVtables(Il2CppType2TypeDeclaringTreeMap& cache);
-		void InitInterfaceVTable(uint16_t& curOffset, std::vector<uint16_t>& implInterfaceOffsetIdxs);
+		void InitInterfaceVTable(uint32_t& curOffset, std::vector<uint16_t>& implInterfaceOffsetIdxs);
 		void ComputeExplicitImpls(const std::vector<uint16_t>& implInterfaceOffsetIdxs, Int32ToUin16Map& explicitImplToken2Slots);
 		void ApplyTypeExplicitImpls(const Il2CppType* type, const VTableSetUp* tree, const std::vector<uint16_t>& implInterfaceOffsetIdxs, Int32ToUin16Map& explicitImplToken2Slots);
-		void ComputeOverrideParentVirtualMethod(uint16_t& curOffset, const std::vector<uint16_t>& implInterfaceOffsetIdxs, Int32ToUin16Map& explicitImplToken2Slots);
+		void ComputeOverrideParentVirtualMethod(uint32_t& curOffset, const std::vector<uint16_t>& implInterfaceOffsetIdxs, Int32ToUin16Map& explicitImplToken2Slots);
 		void ComputeInterfaceOverrideByParentVirtualMethod(const std::vector<uint16_t>& implInterfaceOffsetIdxs);
 		void ComputeInterpTypeVtables(Il2CppType2TypeDeclaringTreeMap& cache);
 		void ComputeInterfaceVtables(Il2CppType2TypeDeclaringTreeMap& cache);

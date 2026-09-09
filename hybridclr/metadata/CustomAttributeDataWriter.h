@@ -1,5 +1,7 @@
 #pragma once
 
+#include <limits>
+
 #include "BlobReader.h"
 
 #include "../CommonDef.h"
@@ -21,6 +23,10 @@ namespace metadata
 		CustomAttributeDataWriter(uint32_t capacity) : _capacity(Round2Exp(capacity)), _size(0)
 		{
 			_data = (uint8_t*)HYBRIDCLR_MALLOC_ZERO(_capacity);
+			if (_data == nullptr)
+			{
+				il2cpp::vm::Exception::RaiseOutOfMemoryException();
+			}
 		}
 
 		~CustomAttributeDataWriter()
@@ -49,13 +55,18 @@ namespace metadata
 
 		void Skip(int32_t skipBytes)
 		{
-			SureRemainSize(skipBytes);
+			if (skipBytes < 0)
+				RaiseExecutionEngineException("negative custom attribute output skip");
+			SureRemainSize(static_cast<uint32_t>(skipBytes));
 			_size += skipBytes;
 		}
 
 		void WriteMethodIndex(int32_t offset, int32_t methodIndex)
 		{
-			*(int32_t*)(_data + offset) = methodIndex;
+			if (offset < 0 || static_cast<uint32_t>(offset) > _size ||
+				sizeof(methodIndex) > _size - static_cast<uint32_t>(offset))
+				RaiseExecutionEngineException("custom attribute method index offset out of range");
+			std::memcpy(_data + offset, &methodIndex, sizeof(methodIndex));
 		}
 
 		void WriteByte(uint8_t n)
@@ -117,8 +128,39 @@ namespace metadata
 
 		void WriteCompressedInt32(int32_t n)
 		{
-			uint32_t v = n >= 0 ? (n << 1) : (((-(n + 1)) << 1) | 0x1U);
+			// Do the zig-zag conversion in unsigned arithmetic.  In particular,
+			// negating INT_MIN in signed arithmetic is undefined.
+			uint32_t un = (uint32_t)n;
+			uint32_t v = (un << 1) ^ (0U - (un >> 31));
 			WriteCompressedUint32(v);
+		}
+
+		// A deferred custom-attribute type index occupies five bytes while the
+		// attribute range is being resolved.  The native reader accepts the F0
+		// form even when a shorter representation would have been possible.
+		uint32_t WriteCompressedInt32Placeholder()
+		{
+			uint32_t offset = _size;
+			SureRemainSize(5);
+			_data[_size++] = 0xF0;
+			_data[_size++] = 0;
+			_data[_size++] = 0;
+			_data[_size++] = 0;
+			_data[_size++] = 0;
+			return offset;
+		}
+
+		void PatchCompressedInt32Placeholder(uint32_t offset, int32_t n)
+		{
+			if (offset > _size || 5u > _size - offset)
+				RaiseExecutionEngineException("custom attribute type fixup offset out of range");
+			uint32_t un = (uint32_t)n;
+			uint32_t v = (un << 1) ^ (0U - (un >> 31));
+			_data[offset] = 0xF0;
+			_data[offset + 1] = (uint8_t)v;
+			_data[offset + 2] = (uint8_t)(v >> 8);
+			_data[offset + 3] = (uint8_t)(v >> 16);
+			_data[offset + 4] = (uint8_t)(v >> 24);
 		}
 
 		template<typename T>
@@ -146,10 +188,18 @@ namespace metadata
 
 		void Write(BlobReader& reader, int32_t count)
 		{
-			SureRemainSize(count);
-			std::memcpy(_data + _size, reader.GetDataOfReadPosition(), count);
-			_size += count;
-			reader.SkipBytes(count);
+			if (count < 0)
+				RaiseExecutionEngineException("negative custom attribute copy size");
+			const uint32_t length = static_cast<uint32_t>(count);
+			// Validate before memcpy; a later checked skip cannot undo an overread.
+			if (reader.GetReadPosition() > reader.GetLength() ||
+				length > reader.GetLength() - reader.GetReadPosition())
+				RaiseExecutionEngineException("custom attribute copy exceeds input blob");
+			SureRemainSize(length);
+			if (length != 0)
+				std::memcpy(_data + _size, reader.GetDataOfReadPosition(), length);
+			_size += length;
+			reader.SkipBytes(length);
 		}
 
 		void PopByte()
@@ -168,18 +218,21 @@ namespace metadata
 		uint32_t Round2Exp(uint32_t n)
 		{
 			uint32_t s = 64;
-			for (uint32_t s = 64; ; s *= 2)
+			while (s < n)
 			{
-				if (s >= n)
-				{
-					return s;
-				}
+				if (s > UINT32_MAX / 2)
+					return n;
+				s *= 2;
 			}
-			return n;
+			return s;
 		}
 
 		void SureRemainSize(uint32_t remainSize)
 		{
+			if (remainSize > UINT32_MAX - _size)
+			{
+				RaiseExecutionEngineException("custom attribute output size overflow");
+			}
 			uint32_t newSize = _size + remainSize;
 			if (newSize > _capacity)
 			{
@@ -189,11 +242,17 @@ namespace metadata
 
 		void Resize(uint32_t newSize)
 		{
-			_capacity = newSize = Round2Exp(newSize);
+			newSize = Round2Exp(newSize);
 			uint8_t* oldData = _data;
-			_data = (uint8_t*)HYBRIDCLR_MALLOC(newSize);
-			std::memcpy(_data, oldData, _size);
+			uint8_t* newData = (uint8_t*)HYBRIDCLR_MALLOC(newSize);
+			if (newData == nullptr)
+			{
+				il2cpp::vm::Exception::RaiseOutOfMemoryException();
+			}
+			std::memcpy(newData, oldData, _size);
 			HYBRIDCLR_FREE(oldData);
+			_data = newData;
+			_capacity = newSize;
 		}
 	};
 }

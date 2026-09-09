@@ -359,6 +359,21 @@ byte* CopyOwnedBytes(const byte* bytes, size_t size)
     return owned;
 }
 
+class ImageReservationGuard
+{
+public:
+    explicit ImageReservationGuard(uint32_t imageId) : _imageId(imageId), _retained(false) {}
+    ~ImageReservationGuard()
+    {
+        if (!_retained && _imageId != kInvalidImageIndex)
+            InterpreterImage::AbortImage(_imageId);
+    }
+    void Retain() { _retained = true; }
+private:
+    uint32_t _imageId;
+    bool _retained;
+};
+
 } // namespace
 
 AssemblyShadowError Assembly::ReadStagedAssemblyIdentity(const byte* dll, size_t dllLength, std::string& name, std::string& detail)
@@ -412,7 +427,9 @@ AssemblyShadowError Assembly::CreateStagedSkeleton(const byte* dll, size_t dllLe
             detail = "Interpreter image index capacity exhausted";
             return AssemblyShadowError::InternalError;
         }
+        ImageReservationGuard reservationGuard(index);
         staged->interpreterImage = new InterpreterImage(index);
+        InterpreterMetadataIndexRuntime::ScopedConstruction construction(index, staged->interpreterImage, true);
         byte* ownedDll = CopyOwnedBytes(dll, dllLength);
         if (staged->interpreterImage->Load(ownedDll, dllLength) != LoadImageErrorCode::OK)
         {
@@ -446,6 +463,7 @@ AssemblyShadowError Assembly::CreateStagedSkeleton(const byte* dll, size_t dllLe
         staged->image->nameNoExt = staged->assembly->aname.name;
         staged->image->assembly = staged->assembly;
         staged->skeletonBuilt = true;
+        reservationGuard.Retain();
         return AssemblyShadowError::Success;
     }
     catch (const Il2CppExceptionWrapper& error) { detail = ManagedExceptionDetail(error); }
@@ -470,6 +488,12 @@ AssemblyShadowError Assembly::InitializeStagedRuntimeMetadata(StagedAssembly* st
         // metadata after commit must not consult a constructor-cached baseline.
         staged->interpreterImage->BindStagedAssemblyReferences();
         staged->interpreterImage->InitRuntimeMetadatas();
+        if (InterpreterImage::FinalizeImage(staged->interpreterImage) != InterpreterMetadataIndexRuntime::Error::None)
+        {
+            detail = staged->canonicalName + ": sparse metadata footprint could not be sealed";
+            InterpreterImage::AbortImage(staged->interpreterImage->GetIndex());
+            return AssemblyShadowError::InternalError;
+        }
         staged->runtimeMetadataInitialized = true;
         return AssemblyShadowError::Success;
     }
@@ -493,8 +517,14 @@ void Assembly::PublishStagedImage(StagedAssembly* staged)
     // Called only from the VM's pre-reserved, locked batch publication. This
     // fixed-index store cannot allocate, register an assembly, or execute code.
     IL2CPP_ASSERT(staged && staged->skeletonBuilt && staged->runtimeMetadataInitialized && !staged->published);
-    InterpreterImage::RegisterImage(staged->interpreterImage);
+    IL2CPP_ASSERT(InterpreterImage::RegisterImage(staged->interpreterImage) == InterpreterMetadataIndexRuntime::Error::None);
     staged->published = true;
+}
+
+bool Assembly::PublishStagedImagesBatch(const std::vector<uint32_t>& imageIndices)
+{
+    return !imageIndices.empty() && InterpreterImage::RegisterImagesBatch(
+        imageIndices.data(), imageIndices.size()) == InterpreterMetadataIndexRuntime::Error::None;
 }
 
 AssemblyShadowError Assembly::RunStagedModuleInitializer(StagedAssembly* staged, std::string& detail)

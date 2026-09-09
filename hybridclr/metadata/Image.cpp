@@ -1013,7 +1013,7 @@ namespace metadata
             const char* typeName = il2cpp::vm::GlobalMetadata::GetStringFromIndex(typeDef->nameIndex);
             for (uint32_t i = 0; i < typeDef->method_count; i++)
             {
-                const Il2CppMethodDefinition* methodDef = il2cpp::vm::GlobalMetadata::GetMethodDefinitionFromIndex(typeDef->methodStart + i);
+                const Il2CppMethodDefinition* methodDef = il2cpp::vm::GlobalMetadata::GetMethodDefinitionFromTypeDefAndMethodIndex(typeDef, i);
                 const char* methodName = il2cpp::vm::GlobalMetadata::GetStringFromIndex(methodDef->nameIndex);
                 IL2CPP_ASSERT((genericInstantiation ? genericInstantiation->type_argc : 0) == resolveSig.genericParamCount);
                 if (std::strcmp(resolveMethodName, methodName) == 0 && IsMatchMethodSig(methodDef, resolveSig, klassGenericContainer))

@@ -51,11 +51,25 @@ namespace metadata
 
 		virtual Il2CppString* GetUserStringBlogByIndex(uint32_t index) const
 		{
-			IL2CPP_ASSERT(index >= 0 && (uint32_t)index < _streamUS.size);
+			if (index >= _streamUS.size)
+			{
+				RaiseExecutionEngineException("bad metadata data. User string index out of bounds");
+				return nullptr;
+			}
 			const byte* str = _streamUS.data + index;
-			uint32_t lengthSize;
-			uint32_t stringLength = BlobReader::ReadCompressedUint32(str, lengthSize);
-			return CreateUserString((const char*)(str + lengthSize), stringLength);
+			const byte* stringData;
+			uint32_t stringLength;
+			if (!BlobReader::TryReadLengthPrefixedBlob(str, _streamUS.size - index, stringData, stringLength))
+			{
+				RaiseExecutionEngineException("bad metadata data. User string length out of bounds");
+				return nullptr;
+			}
+			return CreateUserString((const char*)stringData, stringLength);
+		}
+
+		uint32_t GetStringHeapSize() const
+		{
+			return _streamStringHeap.size;
 		}
 
 		const char* GetStringFromRawIndex(StringIndex index) const
@@ -67,9 +81,33 @@ namespace metadata
 
 		const byte* GetBlobFromRawIndex(StringIndex index) const
 		{
-			IL2CPP_ASSERT(DecodeImageIndex(index) == 0);
-			IL2CPP_ASSERT(index == 0 || (index > 0 && (size_t)index < _streamBlobHeap.size));
-			return _streamBlobHeap.data + index;
+			if (DecodeImageIndex(index) != 0 || index < 0)
+			{
+				RaiseExecutionEngineException("bad metadata data. Blob index out of bounds");
+				return nullptr;
+			}
+			// ECMA-335 reserves blob index zero as the null/empty sentinel. It is
+			// valid even when the image has no #Blob payload bytes.
+			if (index == 0)
+			{
+				return _streamBlobHeap.data;
+			}
+			if ((uint32_t)index >= _streamBlobHeap.size)
+			{
+				RaiseExecutionEngineException("bad metadata data. Blob index out of bounds");
+				return nullptr;
+			}
+			const byte* buf = _streamBlobHeap.data + (uint32_t)index;
+			uint32_t available = _streamBlobHeap.size - (uint32_t)index;
+			uint32_t lengthSize;
+			uint32_t blobLength;
+			if (!BlobReader::TryReadCompressedUint32(buf, available, blobLength, lengthSize) ||
+				blobLength > available - lengthSize)
+			{
+				RaiseExecutionEngineException("bad metadata data. Blob length out of bounds");
+				return nullptr;
+			}
+			return buf;
 		}
 
 		const uint8_t* GetFieldOrParameterDefalutValueByRawIndex(uint32_t index) const
@@ -84,11 +122,37 @@ namespace metadata
 			return BlobReader(buf + sizeLength, length);
 		}
 
+		static BlobReader DecodeBlob(const byte* buf, uint32_t available)
+		{
+			uint32_t sizeLength;
+			uint32_t length;
+			if (!BlobReader::TryReadCompressedUint32(buf, available, length, sizeLength) ||
+				length > available - sizeLength)
+			{
+				RaiseExecutionEngineException("bad metadata data. Blob length out of bounds");
+				return BlobReader(nullptr, 0);
+			}
+			return BlobReader(buf + sizeLength, length);
+		}
+
 		BlobReader GetBlobReaderByRawIndex(uint32_t rawIndex) const
 		{
-			IL2CPP_ASSERT(DecodeImageIndex(rawIndex) == 0);
+			if (DecodeImageIndex((int32_t)rawIndex) != 0)
+			{
+				RaiseExecutionEngineException("bad metadata data. Blob index out of bounds");
+				return BlobReader(nullptr, 0);
+			}
+			// ECMA-335 reserves blob index zero as the null/empty sentinel. Keep it
+			// readable when the optional #Blob stream itself is absent or empty.
+			if (rawIndex == 0 && _streamBlobHeap.size == 0)
+				return BlobReader(nullptr, 0);
+			if (rawIndex >= _streamBlobHeap.size)
+			{
+				RaiseExecutionEngineException("bad metadata data. Blob index out of bounds");
+				return BlobReader(nullptr, 0);
+			}
 			const byte* buf = _streamBlobHeap.data + rawIndex;
-			return DecodeBlob(buf);
+			return DecodeBlob(buf, _streamBlobHeap.size - rawIndex);
 		}
 
 		uint32_t GetImageOffsetOfBlob(Il2CppTypeEnum type, uint32_t index) const

@@ -155,43 +155,13 @@ namespace metadata
 			//std::cout << "=== #GUID. num:" << _streamGuidHeap.size / 16 << std::endl;
 		}
 		{
-			const byte* cur;
-			uint32_t usNum = 0;
-			uint32_t lengthSize;
-			for (cur = _streamUS.data; cur < _streamUS.data + _streamUS.size;)
-			{
-				++usNum;
-				uint32_t stringLength = BlobReader::ReadCompressedUint32(cur, lengthSize);
-				cur += lengthSize;
-				//std::cout << "#us.[" << usNum << "].size:" << stringLength << std::endl;
-				cur += stringLength;
-			}
-			if (cur != _streamUS.data + _streamUS.size)
-			{
-				//std::cerr << "bad #US" << std::endl;
+			if (!BlobReaderBounds::ValidateLengthPrefixedHeap(_streamUS.data, _streamUS.size))
 				return LoadImageErrorCode::BAD_IMAGE;
-			}
-			//std::cout << "=== #US. num:" << usNum << std::endl;
 		}
 
 		{
-			const byte* cur;
-			uint32_t blobNum = 0;
-			uint32_t lengthSize;
-			for (cur = _streamBlobHeap.data; cur < _streamBlobHeap.data + _streamBlobHeap.size;)
-			{
-				++blobNum;
-				uint32_t stringLength = BlobReader::ReadCompressedUint32(cur, lengthSize);
-				cur += lengthSize;
-				//std::cout << "#blob.[" << blobNum << "].size:" << stringLength << std::endl;
-				cur += stringLength;
-			}
-			if (cur != _streamBlobHeap.data + _streamBlobHeap.size)
-			{
-				//std::cerr << "bad #Blob" << std::endl;
+			if (!BlobReaderBounds::ValidateLengthPrefixedHeap(_streamBlobHeap.data, _streamBlobHeap.size))
 				return LoadImageErrorCode::BAD_IMAGE;
-			}
-			//std::cout << "=== #Blob. num:" << blobNum << std::endl;
 			return LoadImageErrorCode::OK;
 		}
 

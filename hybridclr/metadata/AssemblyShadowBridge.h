@@ -49,6 +49,9 @@ class AssemblyShadowBridge
 public:
     static bool IsStaging();
     static InterpreterImage* GetPrivateImage(uint32_t imageIndex);
+    // A Shadow image is public only after the VM release-publishes the complete
+    // active snapshot. This is the lock-free gate paired with codec batches.
+    static bool IsPublicImage(uint32_t imageIndex, InterpreterImage* image);
     // True means TLS owns this lookup, even when result is null. Callers must
     // never fall back to a baseline or ordinary load after a true return.
     static bool TryResolveForCurrentThread(const char* name, const Il2CppAssembly*& result);

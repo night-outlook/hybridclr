@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../CommonDef.h"
+#include "BlobReaderBounds.h"
 #include "MetadataUtil.h"
 
 namespace hybridclr
@@ -33,6 +34,14 @@ namespace metadata
 
         const byte* GetDataOfReadPosition() const
         {
+            if (_buf == nullptr)
+            {
+                return nullptr;
+            }
+            if (!RequireAvailable(0))
+            {
+                return nullptr;
+            }
             return _buf + _readPos;
         }
 
@@ -95,23 +104,48 @@ namespace metadata
             }
         }
 
+        static bool TryReadCompressedUint32(const byte* buf, uint32_t available, uint32_t& value, uint32_t& lengthSize)
+        {
+            return BlobReaderBounds::TryReadCompressedUint32(buf, available, value, lengthSize);
+        }
+
+        static bool TryReadLengthPrefixedBlob(const byte* buf, uint32_t available, const byte*& data, uint32_t& length)
+        {
+            return BlobReaderBounds::TryReadLengthPrefixedBlob(buf, available, data, length);
+        }
+
         uint32_t ReadCompressedUint32()
         {
+            if (!RequireAvailable(1))
+            {
+                return 0;
+            }
             uint32_t lengthSize;
-            uint32_t value = ReadCompressedUint32(_buf + _readPos, lengthSize);
+            uint32_t value;
+            if (!TryReadCompressedUint32(_buf + _readPos, _length - _readPos, value, lengthSize))
+            {
+                RaiseExecutionEngineException("bad metadata data. BlobReader compressed read out of bounds");
+                return 0;
+            }
             _readPos += lengthSize;
             return value;
         }
 
         uint8_t ReadByte()
         {
-            IL2CPP_ASSERT(_readPos < _length);
+            if (!RequireAvailable(1))
+            {
+                return 0;
+            }
             return _buf[_readPos++];
         }
 
         uint16_t Read16()
         {
-            IL2CPP_ASSERT(_readPos + 2 <= _length);
+            if (!RequireAvailable(2))
+            {
+                return 0;
+            }
             uint16_t value = GetU2LittleEndian(_buf + _readPos);
             _readPos += 2;
             return value;
@@ -119,7 +153,10 @@ namespace metadata
 
         uint32_t Read32()
         {
-            IL2CPP_ASSERT(_readPos + 4 <= _length);
+            if (!RequireAvailable(4))
+            {
+                return 0;
+            }
             uint32_t value = (uint32_t)GetI4LittleEndian(_buf + _readPos);
             _readPos += 4;
             return value;
@@ -127,7 +164,7 @@ namespace metadata
 
         bool TryRead32(uint32_t& value)
         {
-            if (_readPos + 4 <= _length)
+            if (HasAvailable(4))
             {
                 value = Read32();
                 return true;
@@ -137,7 +174,10 @@ namespace metadata
 
         uint64_t Read64()
         {
-            IL2CPP_ASSERT(_readPos + 8 <= _length);
+            if (!RequireAvailable(8))
+            {
+                return 0;
+            }
             uint64_t value = (uint64_t)GetI8LittleEndian(_buf + _readPos);
             _readPos += 8;
             return value;
@@ -166,32 +206,58 @@ namespace metadata
 
         uint8_t PeekByte()
         {
-            IL2CPP_ASSERT(_readPos < _length);
+            if (!RequireAvailable(1))
+            {
+                return 0;
+            }
             return _buf[_readPos];
         }
 
         void SkipByte()
         {
-            IL2CPP_ASSERT(_readPos < _length);
+            if (!RequireAvailable(1))
+            {
+                return;
+            }
             ++_readPos;
         }
 
         void SkipBytes(uint32_t len)
         {
-            IL2CPP_ASSERT(_readPos + len <= _length);
-            const byte* data = _buf + _readPos;
+            if (!RequireAvailable(len))
+            {
+                return;
+            }
             _readPos += len;
         }
 
         const byte* GetAndSkipCurBytes(uint32_t len)
         {
-            IL2CPP_ASSERT(_readPos + len <= _length);
+            if (!RequireAvailable(len))
+            {
+                return nullptr;
+            }
             const byte* data = _buf + _readPos;
             _readPos += len;
             return data;
         }
 
     private:
+        bool HasAvailable(uint32_t size) const
+        {
+            return _buf != nullptr && _readPos <= _length && size <= _length - _readPos;
+        }
+
+        bool RequireAvailable(uint32_t size) const
+        {
+            if (HasAvailable(size))
+            {
+                return true;
+            }
+            RaiseExecutionEngineException("bad metadata data. BlobReader read out of bounds");
+            return false;
+        }
+
         const byte* const _buf;
         const uint32_t _length;
         uint32_t _readPos;

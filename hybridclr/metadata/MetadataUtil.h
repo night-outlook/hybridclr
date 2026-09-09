@@ -9,7 +9,6 @@
 
 #include "../CommonDef.h"
 #include "MetadataDef.h"
-#include "InterpreterImageBudget.h"
 #include "AssemblyShadowBridge.h"
 
 namespace hybridclr
@@ -41,11 +40,7 @@ namespace metadata
 
     inline uint16_t GetU2LittleEndian(const byte* data)
     {
-#if SUPPORT_MEMORY_NOT_ALIGMENT_ACCESS
-        uint16_t value = *(uint16_t*)data;
-#else
         uint16_t value = (uint16_t)data[0] | ((uint16_t)data[1] << 8);
-#endif
         return value;
     }
 
@@ -56,14 +51,10 @@ namespace metadata
 
     inline uint32_t GetU4LittleEndian(const byte* data)
     {
-#if SUPPORT_MEMORY_NOT_ALIGMENT_ACCESS
-        uint32_t value = *(uint32_t*)data;
-#else
         uint32_t value = (uint32_t)data[0]
             | ((uint32_t)data[1] << 8)
             | ((uint32_t)data[2] << 16)
             | ((uint32_t)data[3] << 24);
-#endif
         return value;
     }
 
@@ -74,9 +65,6 @@ namespace metadata
 
     inline uint64_t GetU8LittleEndian(const byte* data)
     {
-#if SUPPORT_MEMORY_NOT_ALIGMENT_ACCESS
-        uint64_t value = *(uint64_t*)data;
-#else
         uint64_t value = (uint64_t)data[0]
             + ((uint64_t)data[1] << 8)
             + ((uint64_t)data[2] << 16)
@@ -85,7 +73,6 @@ namespace metadata
             + ((uint64_t)data[5] << 40)
             + ((uint64_t)data[6] << 48)
             + ((uint64_t)data[7] << 56);
-#endif
         return value;
     }
 
@@ -101,77 +88,20 @@ namespace metadata
 
 #pragma region interpreter metadtata index
 
-    const uint32_t kMetadataIndexBits = InterpreterImageBudget::kMetadataIndexBits;
-
-    const uint32_t kMetadataKindBits = InterpreterImageBudget::kMetadataKindBits;
-
-    const uint32_t kMetadataKindShiftBits = 32 - kMetadataKindBits;
-
-    const uint32_t kMetadataImageIndexShiftBits = kMetadataIndexBits;
-
-    const uint32_t kMetadataImageIndexExtraShiftBitsA = InterpreterImageBudget::kMetadataImageIndexExtraShiftBitsA;
-    const uint32_t kMetadataImageIndexExtraShiftBitsB = InterpreterImageBudget::kMetadataImageIndexExtraShiftBitsB;
-    const uint32_t kMetadataImageIndexExtraShiftBitsC = InterpreterImageBudget::kMetadataImageIndexExtraShiftBitsC;
-    const uint32_t kMetadataImageIndexExtraShiftBitsD = InterpreterImageBudget::kMetadataImageIndexExtraShiftBitsD;
-    extern const uint32_t kMetadataImageIndexExtraShiftBitsArr[4];
-
-    const uint32_t kMetadataIndexMaskA = InterpreterImageBudget::kMetadataIndexMaskA;
-    const uint32_t kMetadataIndexMaskB = InterpreterImageBudget::kMetadataIndexMaskB;
-    const uint32_t kMetadataIndexMaskC = InterpreterImageBudget::kMetadataIndexMaskC;
-    const uint32_t kMetadataIndexMaskD = InterpreterImageBudget::kMetadataIndexMaskD;
-    extern const uint32_t kMetadataIndexMaskArr[4];
-
-    const uint32_t kMetadataImageIndexBits = InterpreterImageBudget::kMetadataImageIndexBits;
-
-    const uint32_t kMaxMetadataImageCount = (1 << kMetadataImageIndexBits);
-
-    const uint32_t kMaxMetadataImageIndexWithoutKind = InterpreterImageBudget::kMaxMetadataImageIndexWithoutKind;
-
-    const uint32_t kInvalidImageIndex = InterpreterImageBudget::kInvalidImageIndex;
+    // Sparse profile 2 assigns process-lifetime interpreter identities 1..8192.
+    // Identity zero remains reserved for AOT/unowned values.
+    const uint32_t kMaxMetadataImageCount = 8193;
+    const uint32_t kInvalidImageIndex = 0;
 
     const int32_t kInvalidIndex = -1;
 
-    inline int32_t DecodeMetadataKind(uint32_t index)
-    {
-		return index >> kMetadataKindShiftBits;
-	}
-
-    inline uint32_t DecodeImageIndex(int32_t index)
-    {
-        if (index == kInvalidIndex)
-        {
-			return 0;
-		}
-        uint32_t uindex = (uint32_t)index;
-        uint32_t kind = uindex >> kMetadataKindShiftBits;
-        return (uindex & ~kMetadataIndexMaskArr[kind]) >> kMetadataImageIndexShiftBits;
-    }
-
-    inline uint32_t DecodeMetadataIndex(int32_t index)
-    {
-        if (index == kInvalidIndex)
-        {
-            return kInvalidIndex;
-        }
-        uint32_t uindex = (uint32_t)index;
-        uint32_t kind = uindex >> kMetadataKindShiftBits;
-        return uindex & kMetadataIndexMaskArr[kind];
-    }
-
-    inline int32_t EncodeImageAndMetadataIndex(uint32_t imageIndex, int32_t rawIndex)
-    {
-        if (rawIndex == kInvalidIndex)
-        {
-			return kInvalidIndex;
-		}
-        IL2CPP_ASSERT(((imageIndex << kMetadataImageIndexShiftBits) & (uint32_t)rawIndex) == 0);
-        return (imageIndex << kMetadataIndexBits) | (uint32_t)rawIndex;
-    }
+    uint32_t DecodeImageIndex(int32_t index);
+    uint32_t DecodeMetadataIndex(int32_t index);
+    int32_t EncodeImageAndMetadataIndex(uint32_t imageIndex, int32_t rawIndex);
 
     inline bool IsInterpreterIndex(int32_t index)
     {
-        //return DecodeImageIndex(index) != 0;
-        return index != kInvalidIndex && ((uint32_t)index & ~kMetadataIndexMaskA) != 0;
+        return index < kInvalidIndex;
     }
 
     inline bool IsInterpreterType(const Il2CppTypeDefinition* typeDefinition)

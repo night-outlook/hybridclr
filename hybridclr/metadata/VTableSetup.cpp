@@ -1,4 +1,5 @@
 #include "VTableSetup.h"
+#include "InterpreterMetadataCounts.h"
 
 #include <algorithm>
 
@@ -11,6 +12,8 @@ namespace hybridclr
 {
 namespace metadata
 {
+	static_assert(kInvalidIl2CppMethodSlot == std::numeric_limits<uint16_t>::max(),
+		"native count admission must reserve the invalid method slot");
 	const Il2CppType* TryInflateIfNeed(const Il2CppType* containerType, const Il2CppType* genericType, const Il2CppType* selfType)
 	{
 		if (selfType->type == IL2CPP_TYPE_CLASS || selfType->type == IL2CPP_TYPE_VALUETYPE)
@@ -98,7 +101,7 @@ namespace metadata
 
 		for (uint32_t i = 0; i < typeDef->method_count; i++)
 		{
-			const Il2CppMethodDefinition* methodDef = il2cpp::vm::GlobalMetadata::GetMethodDefinitionFromIndex(typeDef->methodStart + i);
+			const Il2CppMethodDefinition* methodDef = il2cpp::vm::GlobalMetadata::GetMethodDefinitionFromTypeDefAndMethodIndex(typeDef, i);
 			const char* methodName = il2cpp::vm::GlobalMetadata::GetStringFromIndex(methodDef->nameIndex);
 			if (hybridclr::metadata::IsVirtualMethod(methodDef->flags))
 			{
@@ -420,7 +423,7 @@ namespace metadata
 		return it != explicitImplSlots.end() ? it->second : kInvalidIl2CppMethodSlot;
 	}
 
-	void VTableSetUp::InitInterfaceVTable(uint16_t& curOffset, std::vector<uint16_t>& implInterfaceOffsetIdxs)
+	void VTableSetUp::InitInterfaceVTable(uint32_t& curOffset, std::vector<uint16_t>& implInterfaceOffsetIdxs)
 	{
 		for (VTableSetUp* intTree : _interfaces)
 		{
@@ -428,12 +431,14 @@ namespace metadata
 			uint16_t overrideIntIdx;
 			if (!FindType(_parent->_interfaceOffsetInfos, intType, overrideIntIdx))
 			{
+				if (!InterpreterMetadataCounts::CanAppend(_interfaceOffsetInfos.size(), 1) ||
+					!InterpreterMetadataCounts::CanAppend(curOffset, intTree->_virtualMethods.size()))
+					RaiseBadImageException("interpreter interface vtable exceeds native limit");
 				implInterfaceOffsetIdxs.push_back((uint16_t)_interfaceOffsetInfos.size());
 				_interfaceOffsetInfos.push_back({ intType, intTree, curOffset });
-				// curOffset += (uint32_t)intTree->_virtualMethods.size();
 				for (auto& vm : intTree->_virtualMethods)
 				{
-					_methodImpls.push_back({ vm.method, intType, curOffset++ /*, vm.name*/});
+					_methodImpls.push_back({ vm.method, intType, static_cast<uint16_t>(curOffset++) /*, vm.name*/});
 				}
 			}
 			else
@@ -640,9 +645,9 @@ namespace metadata
 		}
 	}
 
-	void VTableSetUp::ComputeOverrideParentVirtualMethod(uint16_t& curOffset, const std::vector<uint16_t>& implInterfaceOffsetIdxs, Int32ToUin16Map& explicitImplToken2Slots)
+	void VTableSetUp::ComputeOverrideParentVirtualMethod(uint32_t& curOffset, const std::vector<uint16_t>& implInterfaceOffsetIdxs, Int32ToUin16Map& explicitImplToken2Slots)
 	{
-		const uint16_t startOffset = curOffset;
+		const uint16_t startOffset = static_cast<uint16_t>(curOffset);
 		// override parent virtual methods and interfaces
 		for (auto& vm : _virtualMethods)
 		{
@@ -665,9 +670,11 @@ namespace metadata
 				}
 				else
 				{
-					_methodImpls.push_back({ vm.method, _type, curOffset /*, vm.name*/});
+					if (!InterpreterMetadataCounts::CanAppend(curOffset, 1))
+						RaiseBadImageException("interpreter virtual method slot exceeds native limit");
+					_methodImpls.push_back({ vm.method, _type, static_cast<uint16_t>(curOffset) /*, vm.name*/});
 					IL2CPP_ASSERT(vm.method->slot == kInvalidIl2CppMethodSlot || vm.method->slot == curOffset);
-					const_cast<Il2CppMethodDefinition*>(vm.method)->slot = curOffset;
+					const_cast<Il2CppMethodDefinition*>(vm.method)->slot = static_cast<uint16_t>(curOffset);
 					++curOffset;
 				}
 			}
@@ -685,9 +692,11 @@ namespace metadata
 				else
 				{
 					IL2CPP_ASSERT(metadata::IsPrivateMethod(mflags));
-					_methodImpls.push_back({ vm.method, _type, curOffset /*, vm.name*/});
+					if (!InterpreterMetadataCounts::CanAppend(curOffset, 1))
+						RaiseBadImageException("interpreter virtual method slot exceeds native limit");
+					_methodImpls.push_back({ vm.method, _type, static_cast<uint16_t>(curOffset) /*, vm.name*/});
 					IL2CPP_ASSERT(vm.method->slot == kInvalidIl2CppMethodSlot || vm.method->slot == curOffset);
-					const_cast<Il2CppMethodDefinition*>(vm.method)->slot = curOffset;
+					const_cast<Il2CppMethodDefinition*>(vm.method)->slot = static_cast<uint16_t>(curOffset);
 					++curOffset;
 				}
 			}
@@ -722,10 +731,13 @@ namespace metadata
 
 	void VTableSetUp::ComputeInterpTypeVtables(Il2CppType2TypeDeclaringTreeMap& cache)
 	{
-		uint16_t curOffset = 0;
+		uint32_t curOffset = 0;
 		if (_parent)
 		{
-			curOffset = (uint16_t)_parent->_methodImpls.size();
+			if (!InterpreterMetadataCounts::CanAppend(_parent->_methodImpls.size(), 0) ||
+				!InterpreterMetadataCounts::CanAppend(_parent->_interfaceOffsetInfos.size(), 0))
+				RaiseBadImageException("inherited interpreter vtable exceeds native limit");
+			curOffset = static_cast<uint32_t>(_parent->_methodImpls.size());
 			_methodImpls = _parent->_methodImpls;
 			_interfaceOffsetInfos = _parent->_interfaceOffsetInfos;
 		}

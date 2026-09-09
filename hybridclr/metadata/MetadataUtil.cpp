@@ -9,27 +9,60 @@
 #include "metadata/GenericMetadata.h"
 
 #include "Image.h"
+#include "InterpreterMetadataIndexRuntime.h"
 #include "MetadataPool.h"
 
 namespace hybridclr
 {
 namespace metadata
 {
-	const uint32_t kMetadataImageIndexExtraShiftBitsArr[4] = 
+	static void RaiseMetadataIndexCodecError(const char* operation,
+		InterpreterMetadataIndexRuntime::Error error)
 	{
-		kMetadataImageIndexExtraShiftBitsA,
-		kMetadataImageIndexExtraShiftBitsB,
-		kMetadataImageIndexExtraShiftBitsC,
-		kMetadataImageIndexExtraShiftBitsD,
-	};
+		if (error == InterpreterMetadataIndexRuntime::Error::None)
+			return;
+		TEMP_FORMAT(message, "%s failed for sparse interpreter metadata index (error %u)",
+			operation, static_cast<unsigned>(error));
+		RaiseExecutionEngineException(message);
+	}
 
-	const uint32_t kMetadataIndexMaskArr[4] = 
+	uint32_t DecodeImageIndex(int32_t index)
 	{
-		kMetadataIndexMaskA,
-		kMetadataIndexMaskB,
-		kMetadataIndexMaskC,
-		kMetadataIndexMaskD,
-	};
+		if (index == kInvalidIndex || index >= 0)
+			return 0;
+		InterpreterMetadataIndexRuntime::Codec::DecodedData decoded;
+		RaiseMetadataIndexCodecError("DecodeImageIndex",
+			InterpreterMetadataIndexRuntime::Decode(index, decoded));
+		return decoded.imageId;
+	}
+
+	uint32_t DecodeMetadataIndex(int32_t index)
+	{
+		if (index == kInvalidIndex)
+			return static_cast<uint32_t>(kInvalidIndex);
+		if (index >= 0)
+			return static_cast<uint32_t>(index);
+		InterpreterMetadataIndexRuntime::Codec::DecodedData decoded;
+		RaiseMetadataIndexCodecError("DecodeMetadataIndex",
+			InterpreterMetadataIndexRuntime::Decode(index, decoded));
+		return static_cast<uint32_t>(decoded.rawIndex);
+	}
+
+	int32_t EncodeImageAndMetadataIndex(uint32_t imageIndex, int32_t rawIndex)
+	{
+		if (rawIndex == kInvalidIndex)
+			return kInvalidIndex;
+		if (imageIndex == 0)
+		{
+			if (rawIndex < 0)
+				RaiseExecutionEngineException("negative AOT metadata index");
+			return rawIndex;
+		}
+		int32_t encoded = kInvalidIndex;
+		RaiseMetadataIndexCodecError("EncodeImageAndMetadataIndex",
+			InterpreterMetadataIndexRuntime::Encode(imageIndex, rawIndex, encoded));
+		return encoded;
+	}
 
 
 	uint32_t GetNotZeroBitCount(uint64_t x)
@@ -660,7 +693,7 @@ namespace metadata
 		const char* typeName = il2cpp::vm::GlobalMetadata::GetStringFromIndex(typeDef->nameIndex);
 		for (uint32_t i = 0; i < typeDef->method_count; i++)
 		{
-			const Il2CppMethodDefinition* methodDef = il2cpp::vm::GlobalMetadata::GetMethodDefinitionFromIndex(typeDef->methodStart + i);
+			const Il2CppMethodDefinition* methodDef = il2cpp::vm::GlobalMetadata::GetMethodDefinitionFromTypeDefAndMethodIndex(typeDef, i);
 			const char* methodName = il2cpp::vm::GlobalMetadata::GetStringFromIndex(methodDef->nameIndex);
 			if (std::strcmp(resolveMethodName, methodName) == 0 && IsMatchMethodSig(methodDef, resolveSig, klassGenericContainer))
 			{
