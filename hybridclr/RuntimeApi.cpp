@@ -17,6 +17,12 @@
 #include "interpreter/InterpreterModule.h"
 #include "RuntimeConfig.h"
 
+#if HYBRIDCLR_H1_COUNT_DIAGNOSTICS
+#include "metadata/InterpreterImage.h"
+#include <exception>
+#include <sstream>
+#endif
+
 namespace hybridclr
 {
 	void RuntimeApi::RegisterInternalCalls()
@@ -33,6 +39,9 @@ namespace hybridclr
         il2cpp::vm::InternalCalls::Add("HybridCLR.RuntimeApi::InspectAssemblyShadowPrototypeObject(System.Object)", (Il2CppMethodPointer)InspectAssemblyShadowPrototypeObject);
         il2cpp::vm::InternalCalls::Add("HybridCLR.RuntimeApi::InspectAssemblyShadowPrototypeAssembly(System.Reflection.Assembly)", (Il2CppMethodPointer)InspectAssemblyShadowPrototypeAssembly);
         il2cpp::vm::InternalCalls::Add("HybridCLR.RuntimeApi::SetAssemblyShadowPrototypePhase(System.String)", (Il2CppMethodPointer)SetAssemblyShadowPrototypePhase);
+#if HYBRIDCLR_H1_COUNT_DIAGNOSTICS
+        il2cpp::vm::InternalCalls::Add("AssemblyShadowDemo.H1CountNativeDiagnostics::GetSnapshot(System.String&)", (Il2CppMethodPointer)GetH1CountDiagnosticsJson);
+#endif
 	}
 
     Il2CppReflectionAssembly* RuntimeApi::LoadAssemblyShadowPrototype(Il2CppArray* dllData, Il2CppArray* pdbData)
@@ -171,4 +180,63 @@ namespace hybridclr
 	{
 		return PreJitMethod0(method->method);
 	}
+
+#if HYBRIDCLR_H1_COUNT_DIAGNOSTICS
+    int32_t RuntimeApi::GetH1CountDiagnosticsJson(Il2CppString** json)
+    {
+        if (json)
+            *json = nullptr;
+        if (!json)
+            return static_cast<int32_t>(il2cpp::vm::AssemblyShadowError::InvalidArgument);
+
+        try
+        {
+            using IndexRuntime = metadata::InterpreterMetadataIndexRuntime;
+            using Codec = IndexRuntime::Codec;
+            Codec::Stats stats{};
+            uint64_t ordinary = 0;
+            uint64_t shadow = 0;
+            uint64_t reserved = 0;
+            if (metadata::InterpreterImage::GetMetadataCapacitySnapshot(stats, ordinary, shadow, reserved) != IndexRuntime::Error::None)
+                return static_cast<int32_t>(il2cpp::vm::AssemblyShadowError::InternalError);
+
+#if HYBRIDCLR_ENABLE_ASSEMBLY_SHADOW
+            const char* featureMode = "AssemblyShadowOn";
+            const char* featureEnabled = "true";
+#else
+            const char* featureMode = "AssemblyShadowOff";
+            const char* featureEnabled = "false";
+#endif
+            std::ostringstream out;
+            out << "{\"schemaVersion\":1"
+                << ",\"kind\":\"H1CountNativeDiagnostics\""
+                << ",\"diagnosticOnly\":true"
+                << ",\"featureEnabled\":" << featureEnabled
+                << ",\"featureMode\":\"" << featureMode << "\""
+                << ",\"reservedPages\":" << stats.reservedPages
+                << ",\"mappedPages\":" << stats.mappedPages
+                << ",\"reservationCount\":" << stats.reservationCount
+                << ",\"nextImageId\":" << stats.nextImageId
+                << ",\"nextPageSlot\":" << stats.nextPageSlot
+                << ",\"ordinaryAllocatedCount\":" << ordinary
+                << ",\"shadowAllocatedCount\":" << shadow
+                << ",\"reservedImageCount\":" << reserved
+                << '}';
+            const std::string serialized = out.str();
+            Il2CppString* result = il2cpp::vm::String::New(serialized.c_str());
+            if (!result)
+                return static_cast<int32_t>(il2cpp::vm::AssemblyShadowError::InternalError);
+            *json = result;
+            return static_cast<int32_t>(il2cpp::vm::AssemblyShadowError::Success);
+        }
+        catch (const std::exception&)
+        {
+            return static_cast<int32_t>(il2cpp::vm::AssemblyShadowError::InternalError);
+        }
+        catch (...)
+        {
+            return static_cast<int32_t>(il2cpp::vm::AssemblyShadowError::InternalError);
+        }
+    }
+#endif
 }

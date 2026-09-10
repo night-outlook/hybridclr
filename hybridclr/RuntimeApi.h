@@ -26,5 +26,9 @@ namespace hybridclr
 
 		static int32_t PreJitClass(Il2CppReflectionType* type);
 		static int32_t PreJitMethod(Il2CppReflectionMethod* method);
+
+#if HYBRIDCLR_H1_COUNT_DIAGNOSTICS
+		static int32_t GetH1CountDiagnosticsJson(Il2CppString** json);
+#endif
 	};
 }
