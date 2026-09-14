@@ -4,6 +4,20 @@ namespace hybridclr
 {
 namespace metadata
 {
+	bool RawImageBase::TryReadGuid(uint32_t index, std::string& result) const
+	{
+		result.clear();
+		if (index == 0 || !_streamGuidHeap.data || index > _streamGuidHeap.size / 16)
+			return false;
+		const byte* guid = _streamGuidHeap.data + size_t(index - 1) * 16;
+		char text[37];
+		std::snprintf(text, sizeof(text), "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+			guid[3], guid[2], guid[1], guid[0], guid[5], guid[4], guid[7], guid[6],
+			guid[8], guid[9], guid[10], guid[11], guid[12], guid[13], guid[14], guid[15]);
+		result.assign(text);
+		return true;
+	}
+
 	LoadImageErrorCode RawImageBase::Load(const void* rawImageData, size_t length)
 	{
 		_imageData = (const byte*)rawImageData;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "../CommonDef.h"
 
 #include "vm/String.h"
@@ -189,6 +191,11 @@ namespace metadata
 		{
 			return _tables[(int)tableIndex].rowNum;
 		}
+
+		// Reads a 1-based metadata GUID heap index with the ECMA-335 byte order
+		// used by managed Guid.ToString(). This is deliberately bounded by the
+		// loaded #GUID stream and never raises for an unavailable MVID.
+		bool TryReadGuid(uint32_t index, std::string& result) const;
 
 		bool TranslateRVAToImageOffset(uint32_t rvaOffset, uint32_t& imageOffset) const
 		{
