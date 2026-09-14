@@ -141,6 +141,13 @@ namespace metadata
         // codec reservation mutex. Capture the diagnostic tuple in that same
         // order so every counter describes one observable runtime instant.
         il2cpp::os::FastAutoLock lock(&il2cpp::vm::g_MetadataLock);
+        return GetMetadataCapacitySnapshotLocked(stats, ordinary, shadow, reserved);
+    }
+
+    InterpreterMetadataIndexRuntime::Error InterpreterImage::GetMetadataCapacitySnapshotLocked(
+        InterpreterMetadataIndexRuntime::Codec::Stats& stats,
+        uint64_t& ordinary, uint64_t& shadow, uint64_t& reserved)
+    {
         InterpreterMetadataIndexRuntime::Error error = InterpreterMetadataIndexRuntime::GetStats(stats);
         if (error != InterpreterMetadataIndexRuntime::Error::None)
             return error;
@@ -1721,28 +1728,41 @@ namespace metadata
 			}
 		}
 
-		int32_t paramTableRowNum = _rawImage->GetTable(TableType::PARAM).rowNum;
+		const uint32_t paramTableRowNum = _rawImage->GetTable(TableType::PARAM).rowNum;
+		struct NamedParamRange
+		{
+			uint32_t start;
+			uint32_t count;
+		};
+		std::vector<NamedParamRange> namedParamRanges(methodTb.rowNum);
+		uint32_t previousParamList = 0;
 		for (uint32_t index = 0; index < methodTb.rowNum; index++)
 		{
 			Il2CppMethodDefinition& md = _methodDefines[index];
 			uint32_t rowIndex = index + 1;
 			TbMethod methodData = _rawImage->ReadMethod(rowIndex);
+			const uint32_t paramList = methodData.paramList;
+			if (paramList == 0 || static_cast<uint64_t>(paramList) > static_cast<uint64_t>(paramTableRowNum) + 1 ||
+				(index > 0 && paramList < previousParamList))
+			{
+				RaiseBadImageException("invalid interpreter method parameter range");
+			}
+			namedParamRanges[index].start = paramList - 1;
+			if (index > 0)
+			{
+				namedParamRanges[index - 1].count = paramList - previousParamList;
+			}
+			previousParamList = paramList;
 
 			md.nameIndex = EncodeWithIndex(methodData.name);
-			md.parameterStart = methodData.paramList - 1;
 			//md.genericContainerIndex = kGenericContainerIndexInvalid;
 			md.token = EncodeToken(TableType::METHOD, rowIndex);
 			md.flags = methodData.flags;
 			md.iflags = methodData.implFlags;
 			md.slot = kInvalidIl2CppMethodSlot;
-			if (index > 0)
-			{
-				auto& last = _methodDefines[index - 1];
-				last.parameterCount = md.parameterStart - last.parameterStart;
-			}
 			if (index == methodTb.rowNum - 1)
 			{
-				md.parameterCount = (int)paramTableRowNum - (int32_t)md.parameterStart;
+				namedParamRanges[index].count = static_cast<uint32_t>(static_cast<uint64_t>(paramTableRowNum) + 1 - paramList);
 			}
 
 			//MethodBody& body = _methodBodies[index];
@@ -1775,36 +1795,51 @@ namespace metadata
 				TbMethod methodData = _rawImage->ReadMethod(rawMethodStart + m + 1);
 
 				BlobReader methodSigReader = _rawImage->GetBlobReaderByRawIndex(methodData.signature);
-				uint32_t namedParamStart = md.parameterStart;
-				uint32_t namedParamCount = md.parameterCount;
+				const NamedParamRange& namedParamRange = namedParamRanges[rawMethodStart + m];
+				const uint32_t namedParamStart = namedParamRange.start;
+				const uint32_t namedParamCount = namedParamRange.count;
 
-				uint32_t actualParamStart = (uint32_t)_params.size();
+				const size_t actualParamStart = _params.size();
 				ReadMethodDefSig(
 					methodSigReader,
 					GetGenericContainerByTypeDefinition(&typeDef),
 					GetGenericContainerByRawIndex(DecodeMetadataIndex(md.genericContainerIndex)),
 					md,
 					_params);
-				uint32_t actualParamCount = (uint32_t)_params.size() - actualParamStart;
-				md.parameterStart = actualParamStart;
-				md.parameterCount = actualParamCount;
-				if (md.parameterCount >= 256)
+				const size_t actualParamCount = _params.size() - actualParamStart;
+				if (actualParamCount >= 256)
 				{
-					TEMP_FORMAT(errMsg, "method:%s.%s parameter count:%d is too large", _rawImage->GetStringFromRawIndex(DecodeMetadataIndex(typeDef.nameIndex)), methodName, md.parameterCount);
-                    RaiseExecutionEngineException(errMsg);
+					TEMP_FORMAT(errMsg, "method:%s.%s parameter count:%u is too large", _rawImage->GetStringFromRawIndex(DecodeMetadataIndex(typeDef.nameIndex)), methodName, static_cast<uint32_t>(actualParamCount));
+                    RaiseBadImageException(errMsg);
 				}
-				for (uint32_t paramRowIndex = namedParamStart + 1; paramRowIndex <= namedParamStart + namedParamCount; paramRowIndex++)
+				const size_t maxParameterIndex = static_cast<size_t>(std::numeric_limits<ParameterIndex>::max());
+				if (actualParamStart > maxParameterIndex || actualParamCount > maxParameterIndex - actualParamStart)
 				{
-					TbParam data = _rawImage->ReadParam(paramRowIndex);
+					RaiseExecutionEngineException("interpreter parameter index exceeds native limit");
+				}
+				md.parameterStart = static_cast<ParameterIndex>(actualParamStart);
+				md.parameterCount = static_cast<uint16_t>(actualParamCount);
+				for (uint64_t paramRowIndex = static_cast<uint64_t>(namedParamStart) + 1;
+					paramRowIndex <= static_cast<uint64_t>(namedParamStart) + namedParamCount; paramRowIndex++)
+				{
+					if (paramRowIndex > paramTableRowNum)
+					{
+						RaiseBadImageException("invalid interpreter method parameter range");
+					}
+					TbParam data = _rawImage->ReadParam(static_cast<uint32_t>(paramRowIndex));
+					if (data.sequence > actualParamCount)
+					{
+						RaiseBadImageException("method parameter sequence exceeds signature parameter count");
+					}
 					if (data.sequence > 0)
 					{
-						int32_t actualParamIndex = actualParamStart + data.sequence - 1;
+						size_t actualParamIndex = actualParamStart + static_cast<size_t>(data.sequence) - 1;
 						ParamDetail& paramDetail = _params[actualParamIndex];
 						Il2CppParameterDefinition& pd = paramDetail.paramDef;
 						IL2CPP_ASSERT(paramDetail.parameterIndex == data.sequence - 1);
 						pd.nameIndex = EncodeWithIndex(data.name);
-						pd.token = EncodeToken(TableType::PARAM, paramRowIndex);
-						(*_paramRawIndex2ActualParamIndex)[paramRowIndex - 1] = actualParamIndex;
+						pd.token = EncodeToken(TableType::PARAM, static_cast<uint32_t>(paramRowIndex));
+						(*_paramRawIndex2ActualParamIndex)[static_cast<size_t>(paramRowIndex - 1)] = static_cast<int32_t>(actualParamIndex);
 						if (data.flags)
 						{
 							const Il2CppType* fieldType = il2cpp::vm::GlobalMetadata::GetIl2CppTypeFromIndex(pd.typeIndex);
@@ -1820,7 +1855,7 @@ namespace metadata
 						// used for parent of CustomeAttributes of ReturnType
 						// il2cpp not support ReturnType CustomAttributes. so we just ignore it.
 #if SUPPORT_METHOD_RETURN_TYPE_CUSTOM_ATTRIBUTE
-						md.returnParameterToken = EncodeToken(TableType::PARAM, paramRowIndex);
+						md.returnParameterToken = EncodeToken(TableType::PARAM, static_cast<uint32_t>(paramRowIndex));
 #endif
 					}
 				}
@@ -2058,13 +2093,27 @@ namespace metadata
 		for (uint32_t i = 0; i < nestedClassTb.rowNum; i++)
 		{
 			TbNestedClass data = _rawImage->ReadNestedClass(i + 1);
+			if (data.nestedClass == 0 || static_cast<size_t>(data.nestedClass) > _typesDefines.size() ||
+				data.enclosingClass == 0 || static_cast<size_t>(data.enclosingClass) > _typesDefines.size() ||
+				data.nestedClass == data.enclosingClass)
+			{
+				RaiseBadImageException("invalid interpreter nested class row");
+			}
 			Il2CppTypeDefinition& nestedType = _typesDefines[data.nestedClass - 1];
 			Il2CppTypeDefinition& enclosingType = _typesDefines[data.enclosingClass - 1];
+			if (!InterpreterMetadataCounts::CanAppend(enclosingType.nested_type_count, 1))
+			{
+				RaiseBadImageException("interpreter nested type count exceeds native limit");
+			}
 			if (enclosingType.nested_type_count == 0)
 			{
 				// 此行代码不能删，用于标识 enclosingTypes的index
 				enclosingType.nestedTypesStart = (uint32_t)enclosingTypes.size();
 				enclosingTypes.push_back({ data.enclosingClass - 1 });
+			}
+			else if (static_cast<size_t>(enclosingType.nestedTypesStart) >= enclosingTypes.size())
+			{
+				RaiseBadImageException("invalid interpreter nested type group");
 			}
 			++enclosingType.nested_type_count;
 			enclosingTypes[enclosingType.nestedTypesStart].nestedTypeIndexs.push_back(data.nestedClass - 1);
@@ -2076,6 +2125,10 @@ namespace metadata
 		{
 			Il2CppTypeDefinition& enclosingTypeDef = _typesDefines[enclosingType.enclosingTypeIndex];
 			IL2CPP_ASSERT(enclosingType.nestedTypeIndexs.size() == (size_t)enclosingTypeDef.nested_type_count);
+			if (!InterpreterMetadataCounts::CanAppend(0, enclosingType.nestedTypeIndexs.size()))
+			{
+				RaiseBadImageException("interpreter nested type count exceeds native limit");
+			}
 			enclosingTypeDef.nestedTypesStart = (NestedTypeIndex)_nestedTypeDefineIndexs.size();
 			enclosingTypeDef.nested_type_count = (uint16_t)enclosingType.nestedTypeIndexs.size();
 			_nestedTypeDefineIndexs.insert(_nestedTypeDefineIndexs.end(), enclosingType.nestedTypeIndexs.begin(), enclosingType.nestedTypeIndexs.end());
@@ -2987,21 +3040,35 @@ namespace metadata
 			IL2CPP_ASSERT(gc->type_argc == genParamCount);
 		}
 		uint32_t paramCount = reader.ReadCompressedUint32();
-		//IL2CPP_ASSERT(paramCount >= methodDef.parameterCount);
+		if (paramCount >= 256)
+		{
+			TEMP_FORMAT(errMsg, "method token:%u parameter count:%u is too large", methodDef.token, paramCount);
+			RaiseBadImageException(errMsg);
+		}
 
 		const Il2CppType* returnType = ReadType(reader, klassGenericContainer, methodGenericContainer);
 		methodDef.returnType = AddIl2CppTypeCache(returnType);
 
-		int readParamNum = 0;
-		for (; reader.NonEmpty(); )
+		for (uint32_t readParamNum = 0; readParamNum < paramCount; readParamNum++)
 		{
+			if (!reader.NonEmpty())
+			{
+				RaiseBadImageException("method signature parameter count mismatch");
+			}
 			ParamDetail curParam = {};
 			const Il2CppType* type = ReadType(reader, klassGenericContainer, methodGenericContainer);
-			curParam.parameterIndex = readParamNum++;
+			curParam.parameterIndex = readParamNum;
+			// An absent Param-table row means an empty name in this
+			// interpreter image. Raw zero would be decoded as AOT/global string
+			// index zero ("mscorlib" in this Unity runtime).
+			curParam.paramDef.nameIndex = EncodeWithIndex(0);
 			curParam.paramDef.typeIndex = AddIl2CppTypeCache(type);
 			paramArr.push_back(curParam);
 		}
-		IL2CPP_ASSERT(readParamNum == (int)paramCount);
+		if (reader.NonEmpty())
+		{
+			RaiseBadImageException("method signature parameter count mismatch");
+		}
 	}
 
 	const Il2CppType* InterpreterImage::GetModuleIl2CppType(uint32_t moduleRowIndex, uint32_t typeNamespace, uint32_t typeName, bool raiseExceptionIfNotFound)

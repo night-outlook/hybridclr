@@ -123,6 +123,10 @@ namespace metadata
         static InterpreterMetadataIndexRuntime::Error GetMetadataCapacitySnapshot(
             InterpreterMetadataIndexRuntime::Codec::Stats& stats,
             uint64_t& ordinary, uint64_t& shadow, uint64_t& reserved);
+        // Same snapshot as above, for callers that already hold g_MetadataLock.
+        static InterpreterMetadataIndexRuntime::Error GetMetadataCapacitySnapshotLocked(
+            InterpreterMetadataIndexRuntime::Codec::Stats& stats,
+            uint64_t& ordinary, uint64_t& shadow, uint64_t& reserved);
         static void GetImageAllocationCounts(uint64_t& ordinary, uint64_t& shadow, uint64_t& reserved);
         static void RecordReservedShadowAllocation();
 
