@@ -1,0 +1,2 @@
+Disposable transport smoke test for Primary Implementation bootstrap on 2026-09-20.
+Safe to delete with the disposable branch.
