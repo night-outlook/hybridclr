@@ -1,0 +1,4 @@
+Connector write smoke test only.
+Repository: night-outlook/hybridclr
+Base: codex/assembly-shadow-r01b-h1
+Purpose: verify authoritative GitHub Connector branch+commit+readback path.
