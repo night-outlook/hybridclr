@@ -1,0 +1,27 @@
+name: R02 source preparation
+on:
+  push:
+    branches: [codex/r02-preparation-20260926-d248]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .r02-preparation
+      - name: Reconstruct hash-bound source blobs without publishing a feature ref
+        env:
+          PREPARE_TOKEN: ${{ github.token }}
+        run: python3 .r02-preparation/prepare.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r02-prepared-hybridclr
+          path: |
+            prepared/source-map.json
+            prepared/work/
+            prepared/primary/
+          retention-days: 7
