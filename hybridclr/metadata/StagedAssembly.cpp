@@ -9,6 +9,7 @@
 #include "Assembly.h"
 #include "AssemblyShadowBridge.h"
 #include "InterpreterImage.h"
+#include "vm/AssemblyShadowTypeResolver.h"
 #include "vm/Image.h"
 #include "vm/MetadataLock.h"
 #include "vm/Runtime.h"
@@ -488,6 +489,12 @@ AssemblyShadowError Assembly::InitializeStagedRuntimeMetadata(StagedAssembly* st
         // metadata after commit must not consult a constructor-cached baseline.
         staged->interpreterImage->BindStagedAssemblyReferences();
         staged->interpreterImage->InitRuntimeMetadatas();
+        // Target providers have been ordered before consumers by the transaction.
+        // The entire private image set is available to metadata resolution here.
+        // A failed V1 screen never marks this image ready and never reaches
+        // publication or a module initializer. The owning transaction retains
+        // its existing Failed/RestartRequired policy for metadata-phase errors.
+        il2cpp::vm::AssemblyShadowTypeResolver::ValidateStagedImage(staged->image);
         if (InterpreterImage::FinalizeImage(staged->interpreterImage) != InterpreterMetadataIndexRuntime::Error::None)
         {
             detail = staged->canonicalName + ": sparse metadata footprint could not be sealed";
@@ -496,6 +503,13 @@ AssemblyShadowError Assembly::InitializeStagedRuntimeMetadata(StagedAssembly* st
         }
         staged->runtimeMetadataInitialized = true;
         return AssemblyShadowError::Success;
+    }
+    catch (const il2cpp::vm::ShadowTypeResolutionFailure& error)
+    {
+        // Preserve existing numeric error identities; the versioned diagnostic
+        // identifies the earlier admission phase without renumbering code 16.
+        detail = staged->canonicalName + ": NativeLayoutAdmissionV1: " + error.what();
+        return error.error;
     }
     catch (const StagedMetadataFailure& error)
     {
