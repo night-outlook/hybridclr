@@ -1,0 +1,3 @@
+Disposable GitHub Connector write smoke test for Assembly Shadow R03.
+Base branch: codex/assembly-shadow-r01b-h1
+Purpose: verify branch + contents commit + read-back transport only.
