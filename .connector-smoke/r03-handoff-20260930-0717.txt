@@ -1,0 +1,2 @@
+Disposable GitHub Connector write smoke test for the R03 Primary Implementation -> Local Validation handoff.
+No product source or active feature branch is modified by this commit.
