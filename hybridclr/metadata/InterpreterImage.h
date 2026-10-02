@@ -174,6 +174,41 @@ namespace metadata
 			return LoadImageErrorCode::OK;
 		}
 
+        // Staging-only success marker. A throwing/partial metadata build cannot
+        // authorize physical admission. Ordinary hot-update initialization is
+        // unchanged and never publishes this staging capability.
+        void InitRuntimeMetadatasForStaging()
+        {
+            _definitionLayoutsReady = false;
+            InitRuntimeMetadatas();
+            _definitionLayoutsReady = true;
+        }
+
+        // Caller holds g_MetadataLock. These are finalized definition layout
+        // tables, NOT lazy Class::SetupFields/static storage or Class::Init.
+        // A partial/failed InitRuntimeMetadatas never publishes this readiness.
+        bool TryGetReadyDefinitionLayout(const Il2CppClass* klass,
+            const Il2CppTypeDefinitionSizes*& sizes) const
+        {
+            sizes = nullptr;
+            if (!_definitionLayoutsReady || !klass || klass->image != _il2cppImage ||
+                klass->generic_class || klass->is_generic || klass->rank || klass->size_init_pending ||
+                (klass->byval_arg.type != IL2CPP_TYPE_CLASS && klass->byval_arg.type != IL2CPP_TYPE_VALUETYPE) ||
+                DecodeTokenTableType(klass->token) != TableType::TYPEDEF)
+                return false;
+            const uint32_t row = DecodeTokenRowIndex(klass->token);
+            if (!row || row > _typesDefines.size() || row > _typeDetails.size() ||
+                klass->typeMetadataHandle != reinterpret_cast<Il2CppMetadataTypeHandle>(&_typesDefines[row - 1]))
+                return false;
+            const auto& value = _typeDetails[row - 1].typeSizes;
+            if (value.instance_size < sizeof(Il2CppObject) || klass->instance_size != value.instance_size ||
+                klass->native_size != value.native_size || klass->static_fields_size != value.static_fields_size ||
+                klass->thread_static_fields_size != value.thread_static_fields_size)
+                return false;
+            sizes = &value;
+            return true;
+        }
+
 		bool IsInitialized() const
 		{
 			return _inited;
@@ -518,7 +553,7 @@ namespace metadata
 
 		Il2CppMetadataEventInfo GetEventInfo(const Il2CppClass* klass, TypeEventIndex index)
 		{
-			const Il2CppTypeDefinition* typeDef = (Il2CppTypeDefinition*)klass->typeMetadataHandle;
+			const Il2CppTypeDefinition* typeDef = (const Il2CppTypeDefinition*)klass->typeMetadataHandle;
 			IL2CPP_ASSERT(typeDef->eventStart);
 			uint32_t rowIndex = DecodeMetadataIndex(typeDef->eventStart) + index;
 			EventDetail& pd = _events[rowIndex - 1];
@@ -823,6 +858,7 @@ namespace metadata
 		std::vector<TypeIndex> _genericConstraints; // raw TypeIndex
 		std::vector<Il2CppGenericContainer> _genericContainers;
 
+        bool _definitionLayoutsReady = false;
 		std::vector<FieldDetail> _fieldDetails;
 		std::vector<Il2CppFieldDefaultValue> _fieldDefaultValues;
 

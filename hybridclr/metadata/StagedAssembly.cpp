@@ -488,7 +488,7 @@ AssemblyShadowError Assembly::InitializeStagedRuntimeMetadata(StagedAssembly* st
         // Bind even references not eagerly touched by layout/vtable setup. Lazy
         // metadata after commit must not consult a constructor-cached baseline.
         staged->interpreterImage->BindStagedAssemblyReferences();
-        staged->interpreterImage->InitRuntimeMetadatas();
+        staged->interpreterImage->InitRuntimeMetadatasForStaging();
         // Target providers have been ordered before consumers by the transaction.
         // The entire private image set is available to metadata resolution here.
         // A failed V1 screen never marks this image ready and never reaches
