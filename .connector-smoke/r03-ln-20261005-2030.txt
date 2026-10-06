@@ -1,0 +1,3 @@
+Disposable R03-LN Connector smoke check.
+Base: 4b2774b066cfc6afd77a8c8aded6bda7ea574f55
+Not product evidence or source authority.
