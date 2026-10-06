@@ -1,0 +1,4 @@
+Disposable Connector write smoke test.
+Repository: night-outlook/hybridclr
+Base: 4b2774b066cfc6afd77a8c8aded6bda7ea574f55
+Purpose: Primary Implementation transport verification only.
