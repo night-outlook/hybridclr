@@ -1,0 +1,3 @@
+Disposable R03-LN Connector tree/commit/ref read-back check.
+Base: codex/assembly-shadow-r01b-h1 at 4b2774b066cfc6afd77a8c8aded6bda7ea574f55.
+Not product evidence, implementation source authority, or acceptance.
