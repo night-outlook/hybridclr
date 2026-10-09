@@ -1,0 +1,5 @@
+GitHub Connector disposable write smoke test.
+Repository: night-outlook/hybridclr
+Base branch: codex/assembly-shadow-r01b-h1
+Smoke branch: codex/connector-smoke-20261009-primary-owner-6c48
+Scope: transport verification only. Not product source, validation evidence, or a handoff.
