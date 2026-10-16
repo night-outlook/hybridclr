@@ -1,0 +1,5 @@
+GitHub Connector transport smoke test
+Repository: night-outlook/hybridclr
+Target: disposable branch codex/pio-connector-smoke-20261015-2036
+Purpose: verify a remote commit can be created and read back; no product code or active feature branch changes.
+Date: 2026-10-15 (PDT)
