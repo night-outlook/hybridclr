@@ -1,0 +1,5 @@
+Primary Implementation GitHub Connector write/read smoke test
+Repository: night-outlook/hybridclr
+Branch: codex/assembly-shadow-smoke-20261020-primary-bootstrap-7fc6
+Purpose: transient transport verification, not implementation or acceptance evidence.
+Date: 2026-10-20
