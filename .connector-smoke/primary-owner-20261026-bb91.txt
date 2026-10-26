@@ -1,0 +1,5 @@
+Primary Implementation Owner connector write smoke test.
+Repository: night-outlook/hybridclr
+Date: 2026-10-26
+Disposable branch: codex/assembly-shadow-smoke-20261026-primary-role-bb91
+No production or feature branch modifications.
