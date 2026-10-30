@@ -1,0 +1,5 @@
+Disposable Connector write/read smoke check
+repository=night-outlook/hybridclr
+branch=codex/assembly-shadow-smoke-20261029-owner-bootstrap-f78c21
+base=codex/assembly-shadow-r01b-h1
+No product code changes.
