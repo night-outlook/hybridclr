@@ -1,0 +1,4 @@
+GitHub Connector disposable write-path smoke test.
+Purpose: verify create-branch, create-file commit, and remote HEAD read-back.
+Date: 2026-11-03
+Not implementation, validation evidence, or authoritative handoff state.
