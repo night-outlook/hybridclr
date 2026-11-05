@@ -1,0 +1,6 @@
+Disposable GitHub Connector write-path smoke test.
+Run: 2026-11-05 UTC.
+Role: Primary Implementation Owner.
+Repository: night-outlook/hybridclr
+Source branch: codex/assembly-shadow-r01b-h1
+No product changes or acceptance claims.
