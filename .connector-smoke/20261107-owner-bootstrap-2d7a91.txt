@@ -1,0 +1,5 @@
+Disposable GitHub Connector smoke test
+Repository: night-outlook/hybridclr
+Base: codex/assembly-shadow-r01b-h1
+Branch: codex/assembly-shadow-smoke-20261107-owner-bootstrap-2d7a91
+Purpose: Confirm remote branch creation and file commit readback without touching active feature branch.
