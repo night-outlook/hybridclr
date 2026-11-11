@@ -1,0 +1,4 @@
+GitHub Connector write smoke test
+Repository: night-outlook/hybridclr
+Branch: codex/assembly-shadow-smoke-20261111-role-bootstrap-cc4d7b
+Purpose: disposable transport verification only; not product evidence.
