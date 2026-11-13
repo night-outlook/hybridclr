@@ -1,0 +1,6 @@
+Disposable GitHub Connector write smoke test
+Repository: night-outlook/hybridclr
+Base: codex/assembly-shadow-r01b-h1
+Branch: codex/assembly-shadow-smoke-20261113-primary-bootstrap-62ed
+Date: 2026-11-13
+Purpose: Verify remote create commit and readback only. No product changes.
