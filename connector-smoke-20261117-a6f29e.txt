@@ -1,0 +1,5 @@
+Disposable GitHub Connector write/readback test.
+Repository: night-outlook/hybridclr
+Base branch: codex/assembly-shadow-r01b-h1
+Date: 2026-11-17
+Do not merge. Branch and file are temporary.
