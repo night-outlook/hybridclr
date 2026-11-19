@@ -132,7 +132,9 @@ namespace metadata
 
 		static InterpreterMetadataIndexRuntime::Error FinalizeImage(InterpreterImage* image);
 		static InterpreterMetadataIndexRuntime::Error RegisterImage(InterpreterImage* image);
-        static InterpreterMetadataIndexRuntime::Error RegisterImagesBatch(const uint32_t* imageIndices, size_t count);
+        static InterpreterMetadataIndexRuntime::Error RegisterImagesBatch(
+            const uint32_t* imageIndices, size_t count,
+            const InterpreterMetadataIndexRuntime::PublicationObserver* observer = nullptr);
         static InterpreterMetadataIndexRuntime::Error AbortImage(uint32_t imageIndex);
 
 		static InterpreterImage* GetImage(uint32_t imageIndex)
