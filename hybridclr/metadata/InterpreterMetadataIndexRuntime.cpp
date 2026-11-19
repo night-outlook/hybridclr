@@ -223,8 +223,12 @@ Runtime::Error Runtime::Publish(uint32_t imageId)
     return PublishBatch(&imageId, 1);
 }
 
-Runtime::Error Runtime::PublishBatch(const uint32_t* imageIds, size_t count)
+Runtime::Error Runtime::PublishBatch(const uint32_t* imageIds, size_t count,
+    const PublicationObserver* observer)
 {
+    // Reject malformed observer contracts before entering any publication.
+    if (observer && (!observer->beforeCodec || !observer->afterRuntimeGroup))
+        return Error::InvalidArgument;
     if (!imageIds || count == 0 || count > Codec::kMaxImageCount)
         return Error::InvalidArgument;
     RuntimeState* current = Ready();
@@ -242,12 +246,22 @@ Runtime::Error Runtime::PublishBatch(const uint32_t* imageIds, size_t count)
             return Error::InvalidState;
         current->publishScratch[index] = record->reservation;
     }
+    // First irreversible Codec store may occur within PublishBatch. Record
+    // the attempt at this exact site, AFTER all Runtime input prechecks and
+    // BEFORE entering Codec. A failed/throwing Codec cannot be assumed private.
+    if (observer && !observer->beforeCodec(observer->context))
+        return Error::InvalidState;
     Error error = current->codec.PublishBatch(current->publishScratch, count);
     if (error != Error::None) return error;
     for (size_t index = 0; index < count; ++index)
         current->records[imageIds[index]].publicationGroup.store(group, std::memory_order_release);
     current->groups[group].active.store(1, std::memory_order_release);
     ++current->nextPublicationGroup;
+    // This fires AFTER the actual group release-store. If the callback
+    // rejects, the group has already been published: the native owner MUST
+    // seal a terminal result, never claim the Codec was rolled back.
+    if (observer && !observer->afterRuntimeGroup(observer->context))
+        return Error::InvalidState;
     return Error::None;
 }
 
