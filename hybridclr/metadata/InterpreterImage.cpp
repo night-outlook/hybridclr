@@ -186,9 +186,10 @@ namespace metadata
 	}
 
     InterpreterMetadataIndexRuntime::Error InterpreterImage::RegisterImagesBatch(
-        const uint32_t* imageIndices, size_t count)
+        const uint32_t* imageIndices, size_t count,
+        const InterpreterMetadataIndexRuntime::PublicationObserver* observer)
     {
-        return InterpreterMetadataIndexRuntime::PublishBatch(imageIndices, count);
+        return InterpreterMetadataIndexRuntime::PublishBatch(imageIndices, count, observer);
 	}
 
     InterpreterMetadataIndexRuntime::Error InterpreterImage::AbortImage(uint32_t imageIndex)
