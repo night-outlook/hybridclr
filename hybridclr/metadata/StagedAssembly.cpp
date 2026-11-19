@@ -535,10 +535,11 @@ void Assembly::PublishStagedImage(StagedAssembly* staged)
     staged->published = true;
 }
 
-bool Assembly::PublishStagedImagesBatch(const std::vector<uint32_t>& imageIndices)
+bool Assembly::PublishStagedImagesBatch(const std::vector<uint32_t>& imageIndices,
+    const InterpreterMetadataIndexRuntime::PublicationObserver* observer)
 {
     return !imageIndices.empty() && InterpreterImage::RegisterImagesBatch(
-        imageIndices.data(), imageIndices.size()) == InterpreterMetadataIndexRuntime::Error::None;
+        imageIndices.data(), imageIndices.size(), observer) == InterpreterMetadataIndexRuntime::Error::None;
 }
 
 AssemblyShadowError Assembly::RunStagedModuleInitializer(StagedAssembly* staged, std::string& detail)
