@@ -17,6 +17,16 @@ public:
     using Error = Codec::Error;
     using Reservation = Codec::Reservation;
 
+    // Synchronous, allocation-free D3 publication evidence. The observer is
+    // borrowed only during PublishBatch; its callbacks must not throw or
+    // acquire transaction/metadata locks. A false callback refuses progress.
+    struct PublicationObserver
+    {
+        bool (*beforeCodec)(void*);
+        bool (*afterRuntimeGroup)(void*);
+        void* context;
+    };
+
     static Error Initialize();
     static Error ReserveImages(uint32_t count, std::vector<Reservation>& output);
     static Error Encode(uint32_t imageId, int64_t rawIndex, int32_t& output);
@@ -25,7 +35,8 @@ public:
     static bool TokenBelongsToImageForVisibility(int32_t token, uint32_t expectedImageId);
     static Error Finalize(uint32_t imageId, uint64_t lowEnd);
     static Error Publish(uint32_t imageId);
-    static Error PublishBatch(const uint32_t* imageIds, std::size_t count);
+    static Error PublishBatch(const uint32_t* imageIds, std::size_t count,
+        const PublicationObserver* observer = nullptr);
     static Error Abort(const Reservation& reservation);
     static Error Abort(uint32_t imageId);
     static Error GetStats(Codec::Stats& output);
