@@ -1,0 +1,5 @@
+Disposable GitHub Connector write smoke test, 2026-11-18 UTC.
+Repository: night-outlook/hybridclr
+Base: codex/assembly-shadow-r01b-h1
+Branch: codex/assembly-shadow-smoke-20261118-primary-owner-b6c914
+Not a product change; no Local Validation authority.
