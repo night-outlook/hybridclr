@@ -1,0 +1,6 @@
+GitHub Connector transport verification only.
+Repository: night-outlook/hybridclr
+Base branch: codex/assembly-shadow-r01b-h1
+Base commit: c3c232023724cbad565b85e9b2c3beea8ce2789a
+Smoke branch: codex/assembly-shadow-smoke-20261122-primary-owner-72b9a6
+Not product source or validation evidence.
