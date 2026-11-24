@@ -1,0 +1,5 @@
+Disposable Connector write transport verification.
+Repository: night-outlook/hybridclr
+Intended base: codex/assembly-shadow at c3c232023724cbad565b85e9b2c3beea8ce2789a
+Branch: codex/assembly-shadow-smoke-20261124-primary-bootstrap-27a6d4
+Only this disposable branch may contain this file.
