@@ -1,0 +1,1 @@
+Disposable connector write verification.
